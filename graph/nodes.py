@@ -1,12 +1,10 @@
 from datetime import datetime
 from graph.state import ContentState
 from agents.planner import PlannerAgent
+from agents.researcher import ResearchAgent
 
 # Placeholder Agent Classes (to be replaced with actual implementations)
-class ResearchAgent:
-    def research(self, queries):
-        # Mock findings
-        return "Research findings based on: " + ", ".join(queries), [{"title": "Doc 1", "content": "Info"}]
+# ResearchAgent is now real and imported above
 
 class WriterAgent:
     def write(self, brief, research):
