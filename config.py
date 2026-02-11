@@ -30,6 +30,16 @@ class Config:
     CHUNK_SIZE = 1000
     CHUNK_OVERLAP = 200
     RETRIEVAL_K = 5
+    
+    # Logging Configuration
+    LOG_DIR = os.getenv("LOG_DIR", "logs")
+    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    LOG_FORMAT = os.getenv("LOG_FORMAT", "human")  # "human" or "json"
+    
+    # Retry Configuration
+    MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+    RETRY_BASE_DELAY = float(os.getenv("RETRY_BASE_DELAY", "1.0"))
+    RETRY_MAX_DELAY = float(os.getenv("RETRY_MAX_DELAY", "60.0"))
 
     @classmethod
     def validate(cls):
@@ -39,3 +49,4 @@ class Config:
 # Create output directories if they don't exist
 os.makedirs(Config.OUTPUT_DIR, exist_ok=True)
 os.makedirs(Config.VECTOR_DB_PATH, exist_ok=True)
+os.makedirs(Config.LOG_DIR, exist_ok=True)

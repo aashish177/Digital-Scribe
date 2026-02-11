@@ -32,3 +32,9 @@ class ContentState(TypedDict):
     errors: Annotated[List[str], add]
     agent_logs: Annotated[List[Dict], add]
     confidence_scores: Optional[Dict]
+    
+    # Execution tracking (Phase 2A)
+    request_id: Optional[str]  # Unique ID for this pipeline run
+    started_at: Optional[str]  # ISO timestamp when pipeline started
+    execution_times: Optional[Dict[str, float]]  # Agent name -> execution time in seconds
+    token_usage: Optional[Dict[str, int]]  # Agent name -> token count
