@@ -59,11 +59,30 @@ User Request → Planner → Researcher → Writer → Editor → SEO → Final 
 
 ### 🚧 In Progress (Phase 2)
 
-- [ ] CLI interface for content generation
-- [ ] Complete end-to-end workflow testing
-- [ ] Output management (Markdown, JSON, HTML exports)
-- [ ] Quality metrics and confidence scoring
-- [ ] Comprehensive error handling and logging
+#### ✅ Phase 2A: Foundation (Completed)
+- [x] Error handling infrastructure with structured error classes
+- [x] Retry utilities with exponential backoff and jitter
+- [x] Comprehensive logging system (JSON and human-readable formats)
+- [x] Request ID tracking across pipeline execution
+- [x] Execution time measurement for all agents
+- [x] Log rotation and multiple log handlers
+
+#### 🔄 Phase 2B: Basic CLI Interface (Next)
+- [ ] CLI argument parser for content generation
+- [ ] Progress indicators for agent execution
+- [ ] Verbose and debug modes
+- [ ] Basic output formatting
+
+#### 📋 Phase 2C: Output Management & Quality Metrics (Planned)
+- [ ] Multi-format exports (Markdown, JSON, HTML)
+- [ ] Audit trail system
+- [ ] Quality scoring and confidence metrics
+- [ ] Enhanced output organization
+
+#### 📋 Phase 2D: Testing & Documentation (Planned)
+- [ ] Comprehensive test suite
+- [ ] CLI usage guide
+- [ ] Updated documentation
 
 ### 📋 Planned (Phase 3+)
 
@@ -120,36 +139,67 @@ User Request → Planner → Researcher → Writer → Editor → SEO → Final 
 
 ## Usage
 
-### Current Usage (Development)
+### Command Line Interface (Recommended)
 
-```python
-from graph.workflow import create_content_workflow
-
-# Create the workflow
-app = create_content_workflow()
-
-# Run the pipeline
-result = app.invoke({
-    "content_request": "Write a comprehensive guide on green tea health benefits",
-    "settings": None,
-    "retrieved_documents": [],
-    "errors": [],
-    "agent_logs": []
-})
-
-# Access the final content
-print(result["final_content"])
-print(result["seo_metadata"])
-```
-
-### Planned CLI Usage
+The easiest way to generate content is using the CLI:
 
 ```bash
-# Generate content
-python main.py --request "Write a guide on indoor gardening" --output ./outputs
+# Basic usage
+python cli.py --request "Write a guide on meditation for beginners"
 
-# With custom settings
-python main.py --request "Tech trends 2025" --word-count 1500 --tone professional
+# With custom options
+python cli.py --request "Tech trends 2025" --word-count 1500 --tone professional
+
+# Multiple output formats
+python cli.py --request "Indoor gardening tips" --format all
+
+# Verbose mode (shows research findings and edit notes)
+python cli.py --request "Green tea benefits" --verbose
+
+# Debug mode (full logging)
+python cli.py --request "Test content" --debug
+
+# Custom output directory
+python cli.py --request "Productivity tips" --output-dir ./my-content
+```
+
+**Available Arguments:**
+- `--request TEXT` (required): Content request description
+- `--output-dir PATH`: Output directory (default: `./outputs`)
+- `--word-count INT`: Target word count
+- `--tone CHOICE`: Content tone (`professional`, `casual`, `friendly`, `technical`)
+- `--format CHOICE`: Output format (`markdown`, `json`, `html`, `all`)
+- `--verbose, -v`: Show detailed output
+- `--debug, -d`: Enable debug mode
+- `--version`: Show version
+- `--help, -h`: Show help message
+
+### Programmatic Usage
+
+```python
+from logging_config import setup_logging
+from graph.workflow import create_content_workflow, initialize_state
+
+# Setup logging
+setup_logging(level="INFO", format_type="human")
+
+# Create workflow
+app = create_content_workflow()
+
+# Initialize state with tracking
+state = initialize_state(
+    content_request="Write a comprehensive guide on green tea health benefits",
+    settings={"word_count": 1000, "tone": "informative"}
+)
+
+# Run pipeline
+result = app.invoke(state)
+
+# Access results
+print(f"Request ID: {result['request_id']}")
+print(f"Final Content: {result['final_content']}")
+print(f"SEO Metadata: {result['seo_metadata']}")
+print(f"Execution Times: {result['execution_times']}")
 ```
 
 ## Project Structure
