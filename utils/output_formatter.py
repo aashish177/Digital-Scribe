@@ -227,13 +227,18 @@ class OutputFormatter:
         file_labels = {
             "content_md": "Content (Markdown):",
             "content_html": "Content (HTML):",
+            "content_json": "Content (JSON):",
             "metadata": "Metadata:",
-            "brief": "Brief:"
+            "seo_metadata": "SEO Metadata:",
+            "brief": "Brief:",
+            "quality_report": "Quality Report:",
+            "audit_log": "Audit Log:",
+            "execution_summary": "Execution Summary:"
         }
         
         for file_type, file_path in output_files.items():
             label = file_labels.get(file_type, f"{file_type}:")
-            table.add_row(label, file_path)
+            table.add_row(label, str(file_path))
         
         self.console.print(table)
     

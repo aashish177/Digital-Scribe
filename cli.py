@@ -23,9 +23,12 @@ from logging_config import setup_logging
 from graph.workflow import create_content_workflow, initialize_state
 from utils.progress import PipelineProgress
 from utils.output_formatter import OutputFormatter
+from utils.output_manager import OutputManager
+from utils.quality import QualityAnalyzer
+from utils.audit import AuditLogger
 
 # Version
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # Console for rich output
 console = Console()
@@ -47,11 +50,11 @@ Examples:
   # Verbose mode
   python cli.py --request "Green tea benefits" --verbose
   
-  # Debug mode with all formats
-  python cli.py --request "Indoor gardening" --debug --format all
+  # Debug mode with all formats and quality report
+  python cli.py --request "Indoor gardening" --debug --format all --quality-report
   
-  # Custom output directory
-  python cli.py --request "Productivity tips" --output-dir ./my-content
+  # Organized output with audit log
+  python cli.py --request "Productivity tips" --organized-output --audit-log
         """
     )
     
@@ -90,6 +93,25 @@ Examples:
         choices=["markdown", "json", "html", "all"],
         default="markdown",
         help="Output format (default: markdown)"
+    )
+    
+    # New flags for Phase 2C
+    parser.add_argument(
+        "--quality-report",
+        action="store_true",
+        help="Generate detailed quality analysis report"
+    )
+    
+    parser.add_argument(
+        "--audit-log",
+        action="store_true",
+        help="Save detailed audit log"
+    )
+    
+    parser.add_argument(
+        "--organized-output",
+        action="store_true",
+        help="Organize outputs in structured directories (timestamp-based)"
     )
     
     # Flags
@@ -147,92 +169,41 @@ def validate_environment() -> None:
         sys.exit(1)
 
 
-def create_output_directory(output_dir: str) -> Path:
-    """Create output directory if it doesn't exist."""
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-    return output_path
-
-
-def save_outputs(result: Dict[str, Any], output_dir: Path, formats: list) -> Dict[str, str]:
-    """Save outputs in requested formats."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_files = {}
-    
-    # Save final content
-    if "markdown" in formats or "all" in formats:
-        content_file = output_dir / f"final_content_{timestamp}.md"
-        content_file.write_text(result.get("final_content", ""))
-        output_files["content_md"] = str(content_file)
-    
-    # Save metadata as JSON
-    if "json" in formats or "all" in formats:
-        import json
-        
-        metadata_file = output_dir / f"metadata_{timestamp}.json"
-        metadata = {
-            "request_id": result.get("request_id"),
-            "started_at": result.get("started_at"),
-            "seo_metadata": result.get("seo_metadata"),
-            "execution_times": result.get("execution_times"),
-            "word_count": len(result.get("final_content", "").split())
-        }
-        metadata_file.write_text(json.dumps(metadata, indent=2))
-        output_files["metadata"] = str(metadata_file)
-        
-        # Also save brief
-        brief_file = output_dir / f"brief_{timestamp}.json"
-        brief_file.write_text(json.dumps(result.get("brief", {}), indent=2))
-        output_files["brief"] = str(brief_file)
-    
-    # Save as HTML (if requested)
-    if "html" in formats or "all" in formats:
-        html_file = output_dir / f"final_content_{timestamp}.html"
-        html_content = generate_html(result)
-        html_file.write_text(html_content)
-        output_files["content_html"] = str(html_file)
-    
-    return output_files
-
-
-def generate_html(result: Dict[str, Any]) -> str:
-    """Generate HTML version of the content."""
-    content = result.get("final_content", "")
-    metadata = result.get("seo_metadata", {})
-    
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="{metadata.get('meta_description', '')}">
-    <title>{metadata.get('meta_title', 'Generated Content')}</title>
-    <style>
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            color: #333;
-        }}
-        h1, h2, h3 {{ color: #2c3e50; }}
-        code {{ background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }}
-        pre {{ background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }}
-    </style>
-</head>
-<body>
-{content}
-</body>
-</html>"""
-    return html
-
-
 def run_pipeline(args: argparse.Namespace) -> None:
     """Run the content generation pipeline."""
     
-    # Create output directory
-    output_dir = create_output_directory(args.output_dir)
+    # Initialize output manager
+    output_manager = OutputManager(Path(args.output_dir))
+    
+    # Determine session directory
+    if args.organized_output:
+        # Create structured session directory
+        try:
+            # We need a request ID first, but we can generate a temporary ID or use timestamp
+            # Better approach: generate ID here
+            from utils.logger import generate_request_id
+            request_id = generate_request_id()
+            session_dir = output_manager.create_session_directory(request_id, args.request)
+        except Exception as e:
+            console.print(f"[red]Error creating session directory: {str(e)}[/red]")
+            session_dir = Path(args.output_dir)
+            request_id = None
+            session_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        # Use flat output directory
+        session_dir = Path(args.output_dir)
+        session_dir.mkdir(parents=True, exist_ok=True)
+        request_id = None
+    
+    # Initialize audit logger if requested
+    audit_logger = None
+    if args.audit_log:
+        audit_logger = AuditLogger(request_id or "pending", args.request)
+        audit_logger.set_settings({
+            "word_count": args.word_count,
+            "tone": args.tone,
+            "format": args.format
+        })
     
     # Create workflow
     app = create_content_workflow()
@@ -250,18 +221,20 @@ def run_pipeline(args: argparse.Namespace) -> None:
         settings=settings if settings else None
     )
     
+    # Update request ID if we generated one earlier
+    if request_id:
+        initial_state["request_id"] = request_id
+    
+    # Update audit logger with final request ID
+    if audit_logger:
+        audit_logger.request_id = initial_state["request_id"]
+    
     # Create progress tracker
     progress = PipelineProgress(console)
     formatter = OutputFormatter(console)
     
     # Show header
-    console.print(Panel(
-        f"[bold cyan]Content Request:[/bold cyan] {args.request}\n"
-        f"[bold cyan]Request ID:[/bold cyan] {initial_state['request_id'][:8]}...",
-        title="Content Generation Pipeline",
-        border_style="cyan"
-    ))
-    console.print()
+    formatter.display_header(args.request, initial_state["request_id"])
     
     try:
         # Run pipeline with progress tracking
@@ -272,18 +245,78 @@ def run_pipeline(args: argparse.Namespace) -> None:
             # Update progress for each completed agent
             for agent, duration in result.get("execution_times", {}).items():
                 progress.complete_agent(agent.capitalize(), duration)
+                
+                # Log to audit trail
+                if audit_logger:
+                    tokens = result.get("token_usage", {}).get(agent, 0)
+                    audit_logger.log_agent_complete(agent, "Completed", duration, tokens)
         
         # Check for errors
         if result.get("errors"):
             formatter.display_error(Exception("; ".join(result["errors"])))
+            if audit_logger:
+                for error in result["errors"]:
+                    audit_logger.log_agent_error("Pipeline", error, 0)
             sys.exit(1)
+            
+        # Perform quality analysis if requested
+        quality_report = None
+        if args.quality_report:
+            analyzer = QualityAnalyzer()
+            quality_report = analyzer.analyze(
+                content=result.get("final_content", ""),
+                metadata=result.get("seo_metadata", {}),
+                brief=result.get("brief", {})
+            ).to_dict()
         
         # Save outputs
         formats = [args.format] if args.format != "all" else ["markdown", "json", "html"]
-        output_files = save_outputs(result, output_dir, formats)
         
-        # Display results
+        if args.organized_output:
+            # Use sophisticated output manager
+            output_files = output_manager.save_all_outputs(
+                result=result,
+                session_dir=session_dir,
+                formats=formats,
+                quality_report=quality_report,
+                audit_log=audit_logger
+            )
+        else:
+            # Simple save (legacy mode)
+            from cli import save_outputs as simple_save
+            output_files = simple_save(result, session_dir, formats)
+            
+            # Save extra reports if requested but not using organized output
+            if quality_report:
+                import json
+                q_file = session_dir / f"quality_report_{result['request_id'][:8]}.json"
+                q_file.write_text(json.dumps(quality_report, indent=2), encoding="utf-8")
+                output_files["quality_report"] = str(q_file)
+            
+            if audit_logger:
+                a_file = session_dir / f"audit_log_{result['request_id'][:8]}.json"
+                audit_logger.save_audit_log(a_file, result)
+                output_files["audit_log"] = str(a_file)
+        
+        # Display results with quality info
         formatter.display_success(result, output_files)
+        
+        if quality_report:
+            # Add quality display method to formatter or print manually
+            console.print(Panel(
+                f"[bold]Overall Quality Score:[/bold] {quality_report['overall_score']}/100\n\n"
+                f"Readability: {quality_report['readability']['score']}/100\n"
+                f"SEO: {quality_report['seo']['score']}/100\n"
+                f"Alignment: {quality_report['alignment']['score']}/100",
+                title="Quality Analysis",
+                border_style="green"
+            ))
+            
+            if quality_report.get('recommendations'):
+                console.print("\n[bold yellow]Recommendations:[/bold yellow]")
+                for rec in quality_report['recommendations']:
+                    console.print(f"• {rec}")
+                console.print()
         
         # Show verbose output if requested
         if args.verbose:
