@@ -22,7 +22,7 @@ def run_cli_command(args: list, expect_success: bool = True) -> tuple:
     Returns:
         Tuple of (returncode, stdout, stderr)
     """
-    cmd = ["uv", "run", "python", "cli.py"] + args
+    cmd = ["python3", "cli.py"] + args
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -140,7 +140,7 @@ def test_invalid_tone():
     print("="*60 + "\n")
     
     result = subprocess.run(
-        ["uv", "run", "python", "cli.py", "--request", "Test", "--tone", "invalid"],
+        ["python3", "cli.py", "--request", "Test", "--tone", "invalid"],
         capture_output=True,
         text=True
     )
@@ -161,7 +161,7 @@ def test_missing_request():
     print("="*60 + "\n")
     
     result = subprocess.run(
-        ["uv", "run", "python", "cli.py", "--word-count", "500"],
+        ["python3", "cli.py", "--word-count", "500"],
         capture_output=True,
         text=True
     )
@@ -209,6 +209,34 @@ def test_output_directory():
             test_dir.rmdir()
 
 
+def test_phase2c_flags():
+    """Test all Phase 2C flags."""
+    print("\n" + "="*60)
+    print("TEST 8: Phase 2C Flags (organized-output, quality, audit)")
+    print("="*60 + "\n")
+    
+    returncode, stdout, stderr = run_cli_command([
+        "--request", "Testing phase 2c logs",
+        "--word-count", "100",
+        "--format", "all",
+        "--organized-output",
+        "--quality-report",
+        "--audit-log"
+    ])
+    
+    if returncode == 0:
+        if "Quality Analysis" in stdout:
+            print("✅ Quality Analysis block shown")
+            if "📁 Output Files:" in stdout:
+                print("✅ File outputs shown")
+                return True
+        print("❌ Flags did not show expected output.")
+        return False
+    else:
+        print(f"❌ Phase 2c Flags test failed")
+        print(f"   Error: {stderr}")
+        return False
+
 def main():
     """Run all CLI tests."""
     print("\n" + "="*60)
@@ -233,6 +261,7 @@ def main():
         results.append(("Basic Generation", test_basic_generation()))
         results.append(("Custom Options", test_custom_options()))
         results.append(("Output Directory", test_output_directory()))
+        results.append(("Phase 2C Flags", test_phase2c_flags()))
     
     results.append(("Invalid Argument", test_invalid_tone()))
     results.append(("Missing Required Arg", test_missing_request()))
