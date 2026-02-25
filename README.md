@@ -57,9 +57,9 @@ User Request → Planner → Researcher → Writer → Editor → SEO → Final 
 - [x] Configuration management with environment variables
 - [x] Mock data generation for testing
 
-### 🚧 In Progress (Phase 2)
+### ✅ Completed (Phase 2)
 
-#### ✅ Phase 2A: Foundation (Completed)
+#### ✅ Phase 2A: Foundation
 - [x] Error handling infrastructure with structured error classes
 - [x] Retry utilities with exponential backoff and jitter
 - [x] Comprehensive logging system (JSON and human-readable formats)
@@ -67,22 +67,22 @@ User Request → Planner → Researcher → Writer → Editor → SEO → Final 
 - [x] Execution time measurement for all agents
 - [x] Log rotation and multiple log handlers
 
-#### 🔄 Phase 2B: Basic CLI Interface (Next)
-- [ ] CLI argument parser for content generation
-- [ ] Progress indicators for agent execution
-- [ ] Verbose and debug modes
-- [ ] Basic output formatting
+#### ✅ Phase 2B: Basic CLI Interface
+- [x] CLI argument parser for content generation
+- [x] Progress indicators for agent execution
+- [x] Verbose and debug modes
+- [x] Basic output formatting
 
-#### 📋 Phase 2C: Output Management & Quality Metrics (Planned)
-- [ ] Multi-format exports (Markdown, JSON, HTML)
-- [ ] Audit trail system
-- [ ] Quality scoring and confidence metrics
-- [ ] Enhanced output organization
+#### ✅ Phase 2C: Output Management & Quality Metrics
+- [x] Multi-format exports (Markdown, JSON, HTML)
+- [x] Audit trail system
+- [x] Quality scoring and confidence metrics
+- [x] Enhanced output organization
 
-#### 📋 Phase 2D: Testing & Documentation (Planned)
-- [ ] Comprehensive test suite
-- [ ] CLI usage guide
-- [ ] Updated documentation
+#### ✅ Phase 2D: Testing & Documentation
+- [x] Comprehensive unit and integration test suite (pytest)
+- [x] CLI usage guide with Recipes
+- [x] Updated architecture documentation
 
 ### 📋 Planned (Phase 3+)
 
@@ -137,70 +137,75 @@ User Request → Planner → Researcher → Writer → Editor → SEO → Final 
    python data/ingest.py
    ```
 
-## Usage
+## Usage Guide
 
-### Command Line Interface (Recommended)
+The Content Generation Pipeline exposes a powerful Command Line Interface for end-to-end processing. Ensure you have activated your environment with the proper `OPENAI_API_KEY` defined in `.env`.
 
-The easiest way to generate content is using the CLI:
+### Basic Usage
 
 ```bash
-# Basic usage
 python cli.py --request "Write a guide on meditation for beginners"
-
-# With custom options
-python cli.py --request "Tech trends 2025" --word-count 1500 --tone professional
-
-# Multiple output formats
-python cli.py --request "Indoor gardening tips" --format all
-
-# Verbose mode (shows research findings and edit notes)
-python cli.py --request "Green tea benefits" --verbose
-
-# Debug mode (full logging)
-python cli.py --request "Test content" --debug
-
-# Custom output directory
-python cli.py --request "Productivity tips" --output-dir ./my-content
 ```
 
-**Available Arguments:**
-- `--request TEXT` (required): Content request description
-- `--output-dir PATH`: Output directory (default: `./outputs`)
-- `--word-count INT`: Target word count
-- `--tone CHOICE`: Content tone (`professional`, `casual`, `friendly`, `technical`)
-- `--format CHOICE`: Output format (`markdown`, `json`, `html`, `all`)
-- `--verbose, -v`: Show detailed output
-- `--debug, -d`: Enable debug mode
-- `--version`: Show version
-- `--help, -h`: Show help message
+### CLI Flags & Arguments
+- `--request TEXT` **(Required)**: The core prompt for content generation.
+- `--output-dir PATH`: Directory where session outputs will be saved (Default: `./outputs`).
+- `--word-count INT`: Approximate word count instruction for WriterAgent (Default: `800`).
+- `--tone CHOICE`: Sets the style constraint (`professional`, `casual`, `friendly`, `technical`).
+- `--format CHOICE`: Output export file formats (`markdown`, `json`, `html`, `all`) (Default: `markdown`).
+- `--organized-output`: Groups the outputs in a designated timestamp-slug session directory. (e.g. `outputs/20260218.../`).
+- `--quality-report`: Triggers a comprehensive content grade based on SEO and Readability via `textstat`, printing it.
+- `--audit-log`: Produces a detailed `audit_log.json` and metric profile over the generated pipeline step.
+- `--verbose, -v`: Displays rich outputs like brief and research stages.
+- `--debug, -d`: Changes logging verbosity.
+- `--version`: Print CLI version.
+- `--help, -h`: Shows extensive parameter details.
+
+### Recipes
+
+**Create a fully production-ready SEO Blog Post:**
+```bash
+python cli.py --request "Tech trends 2026" \
+    --word-count 1500 \
+    --tone professional \
+    --format all \
+    --organized-output \
+    --quality-report \
+    --audit-log
+```
+
+**Generate Bulk Raw Data via JSON formats:**
+```bash
+python cli.py --request "Artificial Intelligence Impact on Finance" \
+    --format json \
+    --output-dir ./finance_data
+```
 
 ### Programmatic Usage
+
+You can hook into the core logic dynamically via Python:
 
 ```python
 from logging_config import setup_logging
 from graph.workflow import create_content_workflow, initialize_state
 
-# Setup logging
-setup_logging(level="INFO", format_type="human")
+setup_logging(level="INFO")
 
-# Create workflow
 app = create_content_workflow()
-
-# Initialize state with tracking
 state = initialize_state(
     content_request="Write a comprehensive guide on green tea health benefits",
     settings={"word_count": 1000, "tone": "informative"}
 )
 
-# Run pipeline
 result = app.invoke(state)
-
-# Access results
 print(f"Request ID: {result['request_id']}")
 print(f"Final Content: {result['final_content']}")
-print(f"SEO Metadata: {result['seo_metadata']}")
-print(f"Execution Times: {result['execution_times']}")
 ```
+
+### Troubleshooting
+- **No API response / AuthenticationError:** Verify your `OPENAI_API_KEY` value across environment configs.
+- **Dependency Issues (e.g., ModuleNotFound ERROR):** Make sure `uv sync` or `pip install -e .` is applied correctly. Ensure `chromadb` has its compiled native dependencies via your OS requirements or conda.
+- **Workflow getting stuck:** Turn on `--debug` to check where execution froze (useful for RAG connectivity issues).
 
 ## Project Structure
 
