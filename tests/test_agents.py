@@ -13,6 +13,16 @@ def mock_chain(mocker):
     mocker.patch('agents.base.BaseAgent.get_chain', return_value=mock)
     return mock
 
+@pytest.fixture
+def mock_chroma(mocker):
+    mock_db = MagicMock()
+    # Patch in all agent modules to be safe
+    mocker.patch('agents.researcher.ChromaDBManager', return_value=mock_db)
+    mocker.patch('agents.editor.ChromaDBManager', return_value=mock_db)
+    mocker.patch('agents.seo.ChromaDBManager', return_value=mock_db)
+    mocker.patch('vector_stores.chroma.ChromaDBManager', return_value=mock_db)
+    return mock_db
+
 def test_planner_agent(mock_chain):
     mock_chain.invoke.return_value = {
         "title": "A Test Title",
@@ -43,8 +53,13 @@ def test_writer_agent(mock_chain):
     assert mock_chain.invoke.called
     assert "drafted content" in result
 
-def test_editor_agent(mock_chain):
+def test_editor_agent(mock_chain, mock_chroma):
     mock_chain.invoke.return_value = "This is the newly edited content.\n---DIVIDER---\nImproved clarity."
+    
+    # Mock chroma query for style guide
+    mock_style_doc = MagicMock()
+    mock_style_doc.page_content = "Style guide content"
+    mock_chroma.query.return_value = [mock_style_doc]
     
     agent = EditorAgent()
     draft = "This is drafted content."
@@ -56,7 +71,7 @@ def test_editor_agent(mock_chain):
     assert "edited content" in edited
     assert "clarity" in notes
 
-def test_seo_agent(mock_chain):
+def test_seo_agent(mock_chain, mock_chroma):
     mock_chain.invoke.return_value = {
         "optimized_content": "Optimized Content text.",
         "metadata": {
@@ -67,6 +82,11 @@ def test_seo_agent(mock_chain):
             "confidence": 0.95
         }
     }
+    
+    # Mock chroma query for competitor data
+    mock_seo_doc = MagicMock()
+    mock_seo_doc.page_content = "Competitor SEO data"
+    mock_chroma.query.return_value = [mock_seo_doc]
     
     agent = SEOAgent()
     content = "Original Content."
@@ -79,21 +99,16 @@ def test_seo_agent(mock_chain):
     assert metadata["title"] == "SEO Title"
     assert metadata["confidence"] == 0.95
 
-# Researcher Agent needs a different approach as it mocks vector stores as well
-@pytest.fixture
-def mock_chroma(mocker):
-    mock_db = MagicMock()
-    mocker.patch('vector_stores.chroma.ChromaDBManager', return_value=mock_db)
-    return mock_db
+# Removed duplicate fixture definition below as it's now at the top
+
 
 def test_researcher_agent(mock_chain, mock_chroma):
     mock_chain.invoke.return_value = "Synthesized research findings."
     
     # Mock search functionality to return fake documents
-    mock_doc = MagicMock()
-    mock_doc.page_content = "Document content"
-    mock_doc.metadata = {"source": "fake"}
-    mock_chroma.search.return_value = [(mock_doc, 0.8)]
+    mock_chroma.query_multireturn.return_value = [
+        {"content": "Document content", "metadata": {"title": "Source 1"}, "source": "fake"}
+    ]
     
     agent = ResearchAgent()
     findings, docs = agent.research(["Test Query 1", "Test Query 2"])

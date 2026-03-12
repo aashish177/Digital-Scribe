@@ -47,8 +47,8 @@ def test_full_workflow_happy_path(
     
     instance_writer = mock_writer.return_value
     # More than 100 words so the retry logic (in should_retry_writing maybe) doesn't fail
-    # Wait, let's see what should_retry_writing does.
-    instance_writer.write.return_value = "This is a dummy draft. " * 30 
+    # Wait, let's see what should_retry_writing does. Needs > 480 words.
+    instance_writer.write.return_value = "This is a dummy draft. " * 100 
     
     instance_editor = mock_editor.return_value
     instance_editor.edit.return_value = ("Edited draft content.", "Fixed typos.")
@@ -83,6 +83,11 @@ def test_workflow_error_handling(
     # Test what happens if the planner fails
     instance_planner = mock_planner.return_value
     instance_planner.plan.side_effect = Exception("Planner failed")
+    
+    # Pre-emptively mock the writer so if the graph reaches it, it doesn't infinite loop
+    # Needs to be > 480 words to pass the default 800 * 0.6 threshold
+    instance_writer = mock_writer.return_value
+    instance_writer.write.return_value = "This is a sufficiently long mock draft to pass the edge validation. " * 100
     
     app = create_content_workflow()
     initial_state = initialize_state("Test Request")
