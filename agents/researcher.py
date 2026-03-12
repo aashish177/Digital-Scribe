@@ -1,4 +1,5 @@
 from typing import List, Tuple, Dict
+from concurrent.futures import ThreadPoolExecutor
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from agents.base import BaseAgent
@@ -49,25 +50,32 @@ class ResearchAgent(BaseAgent):
         all_docs = []
         context_parts = []
         
-        # 1. Retrieve documents for each query
-        for q in queries:
+        # 1. Retrieve documents for each query in parallel
+        def run_query(q):
             try:
                 # Query the 'research' collection
-                results = self.db.query_multireturn("research", q, k=Config.RETRIEVAL_K)
-                
-                if results:
-                    context_parts.append(f"--- Results for query: '{q}' ---")
-                    for r in results:
-                        # Format context for the LLM
-                        source = r.get("metadata", {}).get("title") or r.get("source", "Unknown")
-                        content = r.get("content", "").strip()
-                        context_parts.append(f"Source: {source}\nContent: {content}\n")
-                        
-                        # Add to unique docs list (deduplicating by content content/source somewhat crudely)
-                        if r not in all_docs:
-                            all_docs.append(r)
+                return q, self.db.query_multireturn("research", q, k=Config.RETRIEVAL_K)
             except Exception as e:
                 print(f"[{self.name}] Error querying DB for '{q}': {e}")
+                return q, []
+
+        with ThreadPoolExecutor(max_workers=min(len(queries), 5)) as executor:
+            query_results = list(executor.map(run_query, queries))
+
+        for q, results in query_results:
+            if results:
+                context_parts.append(f"--- Results for query: '{q}' ---")
+                for r in results:
+                    # Format context for the LLM
+                    source = r.get("metadata", {}).get("title") or r.get("source", "Unknown")
+                    content = r.get("content", "").strip()
+                    context_parts.append(f"Source: {source}\nContent: {content}\n")
+                    
+                    # Add to unique docs list (deduplicating by content/source)
+                    # Using deep comparison or unique key if available
+                    content_hash = hash(content) # Simple hash for dedup
+                    if not any(hash(d.get("content", "")) == content_hash for d in all_docs):
+                        all_docs.append(r)
         
         if not context_parts:
             return "No relevant documents found in the knowledge base.", []
