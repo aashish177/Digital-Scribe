@@ -1,21 +1,21 @@
 from graph.state import ContentState
 
 def should_retry_writing(state: ContentState) -> str:
-    """Check if draft needs rewriting"""
+    """Check if draft needs rewriting due to insufficient word count."""
     draft = state.get("draft_content", "")
     brief = state.get("brief", {})
     
     # Simple check for empty draft
     if not draft:
         return "rewrite"
-        
-    # In a real implementation, we would check word counts or other metrics
-    target_words = brief.get("word_count", 1500)
+    
+    # Use the correct field name: word_count_target
+    target_words = brief.get("word_count_target", 800)
     actual_words = len(draft.split())
     
-    # Demo logic: 
-    # If word count is drastically off (e.g. < 10% of target), retry
-    # For now, we'll assume the mock always writes enough.
+    # Retry if draft is less than 60% of the target word count
+    if actual_words < target_words * 0.6:
+        return "rewrite"
     
     return "proceed"
 

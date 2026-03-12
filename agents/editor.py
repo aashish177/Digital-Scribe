@@ -17,14 +17,17 @@ class EditorAgent(BaseAgent):
             
             Inputs:
             1. Draft Content
-            2. Content Brief (requirements)
+            2. Content Brief (requirements, including target word count)
             3. Style Guide (brand rules)
             
             Instructions:
             - Check against the Style Guide (voice, formatting).
-            - Ensure all requirements in the Brief are met.
+            - Ensure all requirements in the Brief are met, including the target word count.
             - Fix grammar, flow, and clarity issues.
             - Do NOT change the core facts or meaning.
+            - PRESERVE WORD COUNT: Do not remove significant content. The article should remain close to the target word count specified in the brief.
+            - If a section is thin or underdeveloped, note it in your changes summary but do NOT cut other sections to compensate.
+            - Only remove content that is genuinely redundant or factually wrong.
             
             Output Format:
             Provide two sections separated by '---DIVIDER---':

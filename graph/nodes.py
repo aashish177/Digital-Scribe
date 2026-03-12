@@ -22,6 +22,15 @@ def planning_node(state: ContentState) -> ContentState:
         agent = PlannerAgent()
         request = state.get("content_request", "")
         brief = agent.plan(request)
+
+        # Override brief with any user-supplied settings (word_count, tone)
+        settings = state.get("settings") or {}
+        if settings.get("word_count"):
+            brief["word_count_target"] = settings["word_count"]
+            logger.info(f"[{request_id[:8]}] Overriding word_count_target to {settings['word_count']}")
+        if settings.get("tone"):
+            brief["tone"] = settings["tone"]
+            logger.info(f"[{request_id[:8]}] Overriding tone to {settings['tone']}")
         
         duration = time.time() - start_time
         

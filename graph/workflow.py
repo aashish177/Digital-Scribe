@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
 from graph.state import ContentState
 from graph.nodes import (
     planning_node,
@@ -14,8 +15,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def create_content_workflow():
-    """Creates the LangGraph workflow with error handling and logging."""
+def create_content_workflow(enable_hitl: bool = False, checkpointer = None):
+    """
+    Creates the LangGraph workflow.
+    
+    Args:
+        enable_hitl: If True, adds an interrupt before the researcher node to allow brief review.
+        checkpointer: Custom checkpointer to use. If enable_hitl is True and none is provided, uses MemorySaver.
+    """
     
     logger.info("Creating content generation workflow")
     
@@ -51,8 +58,18 @@ def create_content_workflow():
     workflow.add_edge("editor", "seo")
     workflow.add_edge("seo", END)
     
+    # Setup Human-in-the-loop if enabled
+    kwargs = {}
+    if enable_hitl:
+        kwargs["interrupt_before"] = ["researcher"]
+        if checkpointer is None:
+            checkpointer = MemorySaver()
+    
+    if checkpointer:
+        kwargs["checkpointer"] = checkpointer
+        
     # Compile the graph
-    app = workflow.compile()
+    app = workflow.compile(**kwargs)
     
     logger.info("Workflow created successfully")
     

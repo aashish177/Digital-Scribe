@@ -15,27 +15,30 @@ class WriterAgent(BaseAgent):
         self.parser = StrOutputParser()
         
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert Content Writer. Your goal is to write high-quality, engaging content based on a strict brief and research.
-            
-            Inputs:
-            1. Content Brief: Contains the topic, audience, tone, and outline.
-            2. Research Summary: Contains the factual information to include.
+            ("system", """You are an expert Content Writer. Your goal is to write high-quality, engaging, long-form content.
             
             Instructions:
-            - Follow the outline in the brief EXACTLY.
-            - Adopt the specified tone and voice.
-            - Integrate the research findings naturally.
-            - Use markdown formatting (H1 for title, H2 for main sections).
-            - Do not invent facts; rely on the research provided.
-            
-            Write the full article now.
+            - Follow the outline in the content brief EXACTLY.
+            - Adopt the tone and voice specified in the brief.
+            - Integrate any research findings naturally into the article.
+            - Use markdown formatting (# for H1 title, ## for H2 sections, ### for H3 subsections).
+            - YOU MUST WRITE APPROXIMATELY {word_count} WORDS. This is mandatory.
+            - Do NOT stop early. Fill each section with in-depth explanations, real-world examples, statistics, trends, and expert insights.
+            - You may supplement sparse research with your own knowledge to reach the target length.
+            - If a section is covered, go deeper: add a "Key Takeaways" subsection, a practical example, or a forward-looking analysis.
+            - Write the complete, full-length article from start to finish without truncating or summarizing.
             """),
             ("user", """
-            Brief:
+            Content Brief:
             {brief}
             
             Research Findings:
             {research}
+            
+            Target Word Count: {word_count} words
+            Tone: {tone}
+            
+            Write the full article now, ensuring you reach {word_count} words.
             """)
         ])
         
@@ -45,16 +48,18 @@ class WriterAgent(BaseAgent):
         """
         Generates content draft based on brief and research.
         """
+        # Extract target values from brief
+        word_count = brief.get("word_count_target", 800)
+        tone = brief.get("tone", "professional")
+        
         # Convert brief dict to string representation for the prompt
         brief_str = str(brief)
         
-        # Optional: Retrieve a writing sample to guide style (simplistic implementation for now)
-        # style_docs = self.db.query("writing", "style guide", k=1)
-        # style_context = style_docs[0].page_content if style_docs else ""
-        
         input_data = {
             "brief": brief_str,
-            "research": research
+            "research": research,
+            "word_count": word_count,
+            "tone": tone,
         }
         
         return self.invoke(input_data)
