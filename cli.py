@@ -282,9 +282,24 @@ def run_pipeline(args: argparse.Namespace) -> None:
                 audit_log=audit_logger
             )
         else:
-            # Simple save (legacy mode)
-            from cli import save_outputs as simple_save
-            output_files = simple_save(result, session_dir, formats)
+            # Simple save
+            from utils.exporters import ContentExporter
+            exporter = ContentExporter()
+            
+            # Generate unique base filename to avoid overwriting
+            slug = output_manager._create_slug(args.request)
+            if not slug:
+                slug = "article"
+            req_id = result.get('request_id', str(int(datetime.now().timestamp())))[:8]
+            base_name = f"{slug}_{req_id}"
+            
+            output_files = {}
+            if 'markdown' in formats or 'all' in formats:
+                output_files['content_md'] = exporter.export_markdown(result, session_dir / f'{base_name}.md')
+            if 'html' in formats or 'all' in formats:
+                output_files['content_html'] = exporter.export_html(result, session_dir / f'{base_name}.html')
+            if 'json' in formats or 'all' in formats:
+                output_files['content_json'] = exporter.export_json(result, session_dir / f'{base_name}.json')
             
             # Save extra reports if requested but not using organized output
             if quality_report:
