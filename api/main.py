@@ -36,6 +36,9 @@ class GenerationRequest(BaseModel):
     tone: Optional[str] = "professional"
     webhook_url: Optional[HttpUrl] = None
     require_approval: Optional[bool] = False
+    languages: Optional[List[str]] = []
+    generate_image: Optional[bool] = True
+    generate_social_posts: Optional[bool] = True
 
 class BatchGenerationRequest(BaseModel):
     requests: List[GenerationRequest]
@@ -102,7 +105,10 @@ async def generate_content(req: GenerationRequest, background_tasks: BackgroundT
     
     settings = {
         "word_count": req.word_count,
-        "tone": req.tone
+        "tone": req.tone,
+        "languages": req.languages,
+        "generate_image": req.generate_image,
+        "generate_social_posts": req.generate_social_posts
     }
     
     jobs[request_id] = {
@@ -268,5 +274,8 @@ async def get_content(request_id: str):
         "request_id": request_id,
         "final_content": result.get("final_content"),
         "seo_metadata": result.get("seo_metadata"),
-        "brief": result.get("brief")
+        "brief": result.get("brief"),
+        "translated_content": result.get("translated_content"),
+        "social_media_posts": result.get("social_media_posts"),
+        "generated_images": result.get("generated_images")
     }

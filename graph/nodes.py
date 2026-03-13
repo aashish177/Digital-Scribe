@@ -7,6 +7,9 @@ from agents.researcher import ResearchAgent
 from agents.writer import WriterAgent
 from agents.editor import EditorAgent
 from agents.seo import SEOAgent
+from agents.translator import TranslatorAgent
+from agents.social_media import SocialMediaAgent
+from agents.image_gen import ImageGenAgent
 from errors import AgentError, PlannerError, ResearcherError, WriterError, EditorError, SEOError
 
 logger = logging.getLogger(__name__)
@@ -249,3 +252,121 @@ def seo_node(state: ContentState) -> ContentState:
         return {
             "errors": [f"SEO error: {str(e)}"]
         }
+
+def translator_node(state: ContentState) -> ContentState:
+    """Translator agent node."""
+    start_time = time.time()
+    request_id = state.get("request_id", "unknown")
+    languages = state.get("target_languages", [])
+    content = state.get("final_content", "")
+    
+    if not languages or not content:
+        return {}
+        
+    logger.info(f"[{request_id[:8]}] Translator node started for languages: {languages}")
+    
+    try:
+        agent = TranslatorAgent()
+        translated = {}
+        for lang in languages:
+            translated[lang] = agent.translate(content, lang)
+            
+        duration = time.time() - start_time
+        execution_times = state.get("execution_times", {})
+        execution_times["translator"] = duration
+        
+        return {
+            "translated_content": translated,
+            "execution_times": execution_times,
+            "agent_logs": [{
+                "agent": "translator",
+                "timestamp": datetime.now().isoformat(),
+                "duration": duration,
+                "languages": languages
+            }]
+        }
+    except Exception as e:
+        logger.error(f"[{request_id[:8]}] Translator failed: {str(e)}", exc_info=True)
+        return {"errors": [f"Translator error: {str(e)}"]}
+
+def social_media_node(state: ContentState) -> ContentState:
+    """Social Media agent node."""
+    start_time = time.time()
+    request_id = state.get("request_id", "unknown")
+    content = state.get("final_content", "")
+    brief = state.get("brief", {})
+    settings = state.get("settings", {})
+    
+    if not content or not settings.get("generate_social_posts", True):
+        return {}
+        
+    logger.info(f"[{request_id[:8]}] Social Media node started")
+    
+    try:
+        agent = SocialMediaAgent()
+        posts = agent.generate_posts(content, brief)
+        
+        duration = time.time() - start_time
+        execution_times = state.get("execution_times", {})
+        execution_times["social_media"] = duration
+        
+        return {
+            "social_media_posts": posts,
+            "execution_times": execution_times,
+            "agent_logs": [{
+                "agent": "social_media",
+                "timestamp": datetime.now().isoformat(),
+                "duration": duration,
+                "platforms": list(posts.keys())
+            }]
+        }
+    except Exception as e:
+        logger.error(f"[{request_id[:8]}] Social Media failed: {str(e)}", exc_info=True)
+        return {"errors": [f"Social Media error: {str(e)}"]}
+
+def image_gen_node(state: ContentState) -> ContentState:
+    """Image Generation agent node."""
+    start_time = time.time()
+    request_id = state.get("request_id", "unknown")
+    brief = state.get("brief", {})
+    settings = state.get("settings", {})
+    
+    if not settings.get("generate_image", True):
+        return {}
+        
+    title = brief.get("title", "Article")
+    
+    logger.info(f"[{request_id[:8]}] Image Gen node started")
+    
+    try:
+        agent = ImageGenAgent()
+        # Create a concept summary
+        summary = f"An article about {title}. Tone is {brief.get('tone', 'professional')}."
+        concept = agent.generate_image_concept(title, summary)
+        
+        # Generate the image
+        image_url = agent.generate_image(concept["prompt"])
+        
+        duration = time.time() - start_time
+        execution_times = state.get("execution_times", {})
+        execution_times["image_gen"] = duration
+        
+        image_data = {
+            "prompt": concept["prompt"],
+            "style": concept["style"],
+            "url": image_url
+        }
+        
+        return {
+            "generated_images": [image_data],
+            "execution_times": execution_times,
+            "agent_logs": [{
+                "agent": "image_gen",
+                "timestamp": datetime.now().isoformat(),
+                "duration": duration,
+                "image_data": image_data
+            }]
+        }
+    except Exception as e:
+        logger.error(f"[{request_id[:8]}] Image Gen failed: {str(e)}", exc_info=True)
+        return {"errors": [f"Image Gen error: {str(e)}"]}

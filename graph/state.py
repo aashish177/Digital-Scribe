@@ -28,6 +28,12 @@ class ContentState(TypedDict):
     final_content: Optional[str]
     seo_metadata: Optional[Dict]
     
+    # Phase 3C: New Modalities
+    target_languages: Optional[List[str]] # e.g. ["spanish", "french"]
+    translated_content: Optional[Dict[str, str]] # language -> content
+    social_media_posts: Optional[Dict[str, str]] # platform -> content
+    generated_images: Optional[List[Dict[str, str]]] # list of {prompt, url}
+    
     # Error tracking and metadata
     errors: Annotated[List[str], add]
     agent_logs: Annotated[List[Dict], add]

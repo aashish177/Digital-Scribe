@@ -6,7 +6,10 @@ from graph.nodes import (
     research_node,
     writing_node,
     editing_node,
-    seo_node
+    seo_node,
+    translator_node,
+    social_media_node,
+    image_gen_node
 )
 from graph.edges import should_retry_writing, check_errors
 from utils.logger import generate_request_id
@@ -35,6 +38,9 @@ def create_content_workflow(enable_hitl: bool = False, checkpointer = None):
     workflow.add_node("writer", writing_node)
     workflow.add_node("editor", editing_node)
     workflow.add_node("seo", seo_node)
+    workflow.add_node("translator", translator_node)
+    workflow.add_node("social_media", social_media_node)
+    workflow.add_node("image_gen", image_gen_node)
     
     # Set entry point
     workflow.set_entry_point("planner")
@@ -56,7 +62,10 @@ def create_content_workflow(enable_hitl: bool = False, checkpointer = None):
     # TODO: Add error handling edges using check_errors if needed
     
     workflow.add_edge("editor", "seo")
-    workflow.add_edge("seo", END)
+    workflow.add_edge("seo", "translator")
+    workflow.add_edge("translator", "social_media")
+    workflow.add_edge("social_media", "image_gen")
+    workflow.add_edge("image_gen", END)
     
     # Setup Human-in-the-loop if enabled
     kwargs = {}
@@ -106,6 +115,11 @@ def initialize_state(content_request: str, settings: dict = None) -> ContentStat
         "edit_notes": None,
         "final_content": None,
         "seo_metadata": None,
+        # Phase 3C: New Modalities
+        "target_languages": settings.get("languages", []) if settings else [],
+        "translated_content": {},
+        "social_media_posts": {},
+        "generated_images": [],
         "errors": [],
         "agent_logs": [],
         "confidence_scores": None,
