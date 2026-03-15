@@ -1,4 +1,4 @@
-# Multi-Agent Content Generation Pipeline
+# Digital Scribe
 
 An autonomous AI content creation system that orchestrates 5 specialized agents using LangGraph to produce high-quality, SEO-optimized content. The system leverages Retrieval-Augmented Generation (RAG) with ChromaDB to ground outputs in factual information and brand guidelines.
 
