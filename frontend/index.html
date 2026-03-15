@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic Content Factory | Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="dark">
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i data-lucide="zap"></i>
+                <span>ACF 1.0</span>
+            </div>
+            <nav>
+                <a href="#" class="active"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+                <a href="#"><i data-lucide="file-text"></i> Library</a>
+                <a href="#"><i data-lucide="bar-chart-2"></i> Analytics</a>
+                <a href="#"><i data-lucide="settings"></i> Settings</a>
+            </nav>
+            <div class="user-profile">
+                <div class="avatar">AM</div>
+                <div class="info">
+                    <span class="name">Aashish M.</span>
+                    <span class="role">Admin</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header>
+                <h1>Content Generation Dashboard</h1>
+                <div class="actions">
+                    <button id="new-request-btn" class="btn-primary">
+                        <i data-lucide="plus"></i> New Article
+                    </button>
+                </div>
+            </header>
+
+            <div class="dashboard-grid">
+                <!-- Generation Form (Hidden by default or Modal) -->
+                <section id="request-section" class="card glass">
+                    <div class="card-header">
+                        <h2>Create New Content</h2>
+                        <button class="close-btn" id="hide-request-btn"><i data-lucide="x"></i></button>
+                    </div>
+                    <form id="gen-form">
+                        <div class="form-group">
+                            <label for="request">Topic or Prompt</label>
+                            <textarea id="request" placeholder="What should we write about today?" required></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="word_count">Word Count</label>
+                                <input type="number" id="word_count" value="800">
+                            </div>
+                            <div class="form-group">
+                                <label for="tone">Tone</label>
+                                <select id="tone">
+                                    <option value="professional">Professional</option>
+                                    <option value="casual">Casual</option>
+                                    <option value="friendly">Friendly</option>
+                                    <option value="technical">Technical</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Advanced Modalities</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" id="gen_image" checked> Generate DALL-E Image</label>
+                                <label><input type="checkbox" id="gen_social" checked> Create Social Posts</label>
+                                <label><input type="checkbox" id="require_approval" checked> Require Brief Approval</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="languages">Target Languages (comma separated)</label>
+                            <input type="text" id="languages" placeholder="Spanish, French, German">
+                        </div>
+                        <button type="submit" class="btn-submit">Launch Pipeline</button>
+                    </form>
+                </section>
+
+                <!-- Status & Progress -->
+                <section id="status-section" class="card glass hidden">
+                    <div class="card-header">
+                        <h2>Pipeline Progress</h2>
+                        <span id="current-status" class="badge">Idle</span>
+                    </div>
+                    <div class="pipeline-visualizer">
+                        <div class="step" data-step="planner">
+                            <div class="step-icon"><i data-lucide="map"></i></div>
+                            <span class="step-label">Planner</span>
+                        </div>
+                        <div class="line"></div>
+                        <div class="step" data-step="researcher">
+                            <div class="step-icon"><i data-lucide="search"></i></div>
+                            <span class="step-label">Researcher</span>
+                        </div>
+                        <div class="line"></div>
+                        <div class="step" data-step="writer">
+                            <div class="step-icon"><i data-lucide="pen-tool"></i></div>
+                            <span class="step-label">Writer</span>
+                        </div>
+                        <div class="line"></div>
+                        <div class="step" data-step="editor">
+                            <div class="step-icon"><i data-lucide="check-square"></i></div>
+                            <span class="step-label">Editor</span>
+                        </div>
+                        <div class="line"></div>
+                        <div class="step" data-step="seo">
+                            <div class="step-icon"><i data-lucide="trending-up"></i></div>
+                            <span class="step-label">SEO</span>
+                        </div>
+                    </div>
+                    <div id="hitl-panel" class="hitl-panel hidden">
+                        <div class="hitl-header">
+                            <i data-lucide="alert-circle"></i>
+                            <span>Brief Awaiting Approval</span>
+                        </div>
+                        <div id="brief-preview" class="brief-preview"></div>
+                        <button id="approve-btn" class="btn-approve">Approve & Continue Research</button>
+                    </div>
+                    <div class="logs-window">
+                        <div id="logs" class="logs"></div>
+                    </div>
+                </section>
+
+                <!-- Final View -->
+                <section id="result-section" class="card glass hidden">
+                    <div class="card-header">
+                        <h2>Generated Content</h2>
+                        <div class="result-actions">
+                            <button id="copy-btn"><i data-lucide="copy"></i></button>
+                            <button id="download-btn"><i data-lucide="download"></i></button>
+                        </div>
+                    </div>
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="article">Article</button>
+                        <button class="tab-btn" data-tab="social">Social Media</button>
+                        <button class="tab-btn" data-tab="images">Images</button>
+                        <button class="tab-btn" data-tab="translations">Translations</button>
+                    </div>
+                    <div class="tab-content">
+                        <div id="article-view" class="tab-pane active"></div>
+                        <div id="social-view" class="tab-pane"></div>
+                        <div id="images-view" class="tab-pane"></div>
+                        <div id="translations-view" class="tab-pane"></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="/static/main.js"></script>
+</body>
+</html>
