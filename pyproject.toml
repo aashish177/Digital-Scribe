@@ -17,7 +17,9 @@ dependencies = [
     "langgraph>=1.0.6",
     "markdown2>=2.5.5",
     "python-dotenv>=1.2.1",
+    "rank-bm25>=0.2.2",
     "rich>=14.2.0",
+    "sse-starlette>=2.2.1",
     "textstat>=0.7.13",
     "uvicorn>=0.40.0",
 ]
