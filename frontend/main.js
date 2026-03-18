@@ -107,15 +107,32 @@ function connectStream(requestId) {
                 break;
 
             case 'node_complete':
-                log(`Step completed: ${data.node}`);
-                updateStep(data.node, 'completed');
+                if (data.node === '__interrupt__') {
+                    log('⏸ Pipeline paused for brief approval...');
+                    // Fallback: poll status if awaiting_approval event was missed
+                    setTimeout(() => pollForApproval(currentRequestId), 800);
+                } else {
+                    log(`✅ Step completed: ${data.node}`);
+                    updateStep(data.node, 'completed');
+                }
                 break;
 
             case 'awaiting_approval':
+                console.log('HITL: Awaiting approval event received', data);
                 currentStatusBadge.textContent = 'Action Required';
-                log('Pipeline paused: Awaiting brief approval', 'info');
+                currentStatusBadge.classList.add('warning');
+                log('🔶 Pipeline paused: Awaiting brief approval — please review below.', 'info');
+
+                // Force show both sections to be sure
+                statusSection.classList.remove('hidden');
                 hitlPanel.classList.remove('hidden');
-                briefPreview.textContent = JSON.stringify(data.brief, null, 2);
+
+                if (data.brief) {
+                    briefPreview.textContent = JSON.stringify(data.brief, null, 2);
+                } else {
+                    briefPreview.textContent = "Loading brief details...";
+                    pollForApproval(currentRequestId); // Fetch if missing
+                }
                 break;
 
             case 'resuming':
@@ -142,8 +159,41 @@ function connectStream(requestId) {
 
     eventSource.onerror = (err) => {
         console.error('SSE Error:', err);
+        log('Connection lost, polling for status...', 'info');
         eventSource.close();
+        // Fallback: poll to catch any missed events
+        setTimeout(() => pollForApproval(currentRequestId), 1000);
     };
+}
+
+// Fallback poll: check /api/v1/status in case SSE events were missed
+async function pollForApproval(requestId) {
+    if (!requestId) return;
+    try {
+        const res = await fetch(`/api/v1/status/${requestId}`);
+        const data = await res.json();
+        if (data.status === 'awaiting_approval') {
+            console.log('HITL: Status poll detected awaiting_approval');
+            currentStatusBadge.textContent = 'Action Required';
+            currentStatusBadge.classList.add('warning');
+
+            statusSection.classList.remove('hidden');
+            hitlPanel.classList.remove('hidden');
+
+            if (data.brief) {
+                briefPreview.textContent = JSON.stringify(data.brief, null, 2);
+            }
+        } else if (data.status === 'completed') {
+            fetchResults(requestId);
+        } else if (data.status === 'failed') {
+            log(`Error: ${data.error}`, 'error');
+        } else if (data.status === 'processing') {
+            // Still running, check again in 3s
+            setTimeout(() => pollForApproval(requestId), 3000);
+        }
+    } catch (err) {
+        console.error('Status poll failed:', err);
+    }
 }
 
 // Fetch final results

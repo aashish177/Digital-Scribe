@@ -74,6 +74,14 @@ def create_content_workflow(enable_hitl: bool = False, checkpointer = None):
         if checkpointer is None:
             checkpointer = MemorySaver()
     
+    # Accept "memory" as a shorthand to create a MemorySaver
+    if checkpointer == "memory":
+        checkpointer = MemorySaver()
+    
+    # Always attach a checkpointer so get_state() works on any compiled app
+    if checkpointer is None:
+        checkpointer = MemorySaver()
+    
     if checkpointer:
         kwargs["checkpointer"] = checkpointer
         
