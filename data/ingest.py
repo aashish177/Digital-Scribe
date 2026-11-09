@@ -1,5 +1,7 @@
 import sys
 import os
+import json
+from pathlib import Path
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -8,31 +10,32 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from vector_stores.chroma import ChromaDBManager
 
+SOURCES_DIR = Path(__file__).parent / "sources"
+
+
+def load_source_documents(sources_dir: Path = SOURCES_DIR):
+    """Loads data/sources/<topic>/*.md written by scripts/fetch_sources.py."""
+    docs = []
+    for path in sorted(sources_dir.glob("*/*.md")):
+        _, header, body = path.read_text(encoding="utf-8").split("---\n", 2)
+        meta = json.loads(header)
+        docs.append(Document(
+            page_content=body,
+            metadata={
+                "source": meta["url"],
+                "title": meta["title"],
+                "topic": path.parent.name,
+                "revision": meta["revision"],
+            },
+        ))
+    return docs
+
+
 def create_mock_data():
-    """Generates mock data for all collections"""
+    """Builds documents for all collections"""
     
     # 1. Research Documents
-    research_docs = [
-        Document(
-            page_content="""
-            Green Tea Health Benefits:
-            Green tea is rich in polyphenols, which are natural compounds that have health benefits, such as reducing inflammation and helping to fight cancer.
-            Green tea contains a catechin called epigallocatechin-3-gallate (EGCG). Catechins are natural antioxidants that help prevent cell damage and provide other benefits.
-            Studies show that green tea may improve brain function. The key active ingredient is caffeine. It also contains the amino acid L-theanine, which can cross the blood-brain barrier.
-            Green tea may burn fat and boost metabolic rate. In one study of 10 healthy men, taking green tea extract increased the number of calories burned by 4%.
-            """,
-            metadata={"source": "healthline_mock.txt", "title": "Green Tea Benefits", "topic": "health"}
-        ),
-        Document(
-            page_content="""
-            Coffee vs Tea:
-            While both coffee and tea provide caffeine, tea generally provides a smoother buzz due to L-theanine.
-            Coffee typically has more caffeine per cup (95mg vs 35-50mg for green tea).
-            Both are loaded with antioxidants, but they are different types.
-            """,
-            metadata={"source": "beverage_comparison.txt", "title": "Coffee vs Tea", "topic": "health"}
-        )
-    ]
+    research_docs = load_source_documents()
     
     # 2. Writing Samples (Templates/High-quality content)
     writing_samples = [
