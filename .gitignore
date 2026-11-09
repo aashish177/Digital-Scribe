@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Secrets
+.env
+
+# Runtime output
+data/vectordb/
+logs/
+outputs/
+test_outputs/
+
+# OS
+.DS_Store

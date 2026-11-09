@@ -60,7 +60,7 @@ def test_full_workflow_happy_path(
     initial_state = initialize_state("Test request")
     
     # Run workflow
-    final_state = app.invoke(initial_state)
+    final_state = app.invoke(initial_state, config={"configurable": {"thread_id": "test"}})
     
     # Assertions
     assert "brief" in final_state
@@ -100,7 +100,7 @@ def test_workflow_error_handling(
     # In testing, we just invoke and let it fail or finish.
     # We can check if errors list contains the planner error.
     try:
-        final_state = app.invoke(initial_state)
+        final_state = app.invoke(initial_state, config={"configurable": {"thread_id": "test"}})
         # Because we don't have a conditional abort edge by default, it might hit other nodes and fail too
         assert any("Planner failed" in err for err in final_state["errors"])
     except Exception as e:

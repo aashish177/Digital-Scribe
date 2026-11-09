@@ -7,8 +7,8 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from langchain_community.retrievers import BM25Retriever
 from langchain_community.document_compressors.flashrank_rerank import FlashrankRerank
-from langchain.embeddings import CacheBackedEmbeddings
-from langchain.storage import LocalFileStore
+from langchain_classic.embeddings import CacheBackedEmbeddings
+from langchain_classic.storage import LocalFileStore
 from config import Config
 
 class ChromaDBManager:

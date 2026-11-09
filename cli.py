@@ -240,7 +240,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
         # Run pipeline with progress tracking
         with progress.live_display():
             # Execute workflow
-            result = app.invoke(initial_state)
+            result = app.invoke(
+                initial_state,
+                config={"configurable": {"thread_id": initial_state["request_id"]}},
+            )
             
             # Update progress for each completed agent
             for agent, duration in result.get("execution_times", {}).items():

@@ -295,7 +295,7 @@ def social_media_node(state: ContentState) -> ContentState:
     request_id = state.get("request_id", "unknown")
     content = state.get("final_content", "")
     brief = state.get("brief", {})
-    settings = state.get("settings", {})
+    settings = state.get("settings") or {}
     
     if not content or not settings.get("generate_social_posts", True):
         return {}
@@ -329,7 +329,7 @@ def image_gen_node(state: ContentState) -> ContentState:
     start_time = time.time()
     request_id = state.get("request_id", "unknown")
     brief = state.get("brief", {})
-    settings = state.get("settings", {})
+    settings = state.get("settings") or {}
     
     if not settings.get("generate_image", True):
         return {}
