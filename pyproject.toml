@@ -1,7 +1,7 @@
 [project]
-name = "content-generation"
+name = "digital-scribe"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-agent content pipeline built on LangGraph, with hybrid RAG over ChromaDB"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

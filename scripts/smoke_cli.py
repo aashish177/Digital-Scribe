@@ -27,7 +27,7 @@ def run_cli_command(args: list, expect_success: bool = True) -> tuple:
         cmd,
         capture_output=True,
         text=True,
-        cwd=Path(__file__).parent
+        cwd=Path(__file__).parent.parent
     )
     
     if expect_success and result.returncode != 0:

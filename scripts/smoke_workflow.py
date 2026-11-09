@@ -28,7 +28,7 @@ def main():
     
     try:
         # Run workflow
-        result = app.invoke(initial_state)
+        result = app.invoke(initial_state, config={"configurable": {"thread_id": "smoke"}})
         
         print("\n--- Workflow Completed Successfully ---")
         
