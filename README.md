@@ -1,5 +1,7 @@
 # Digital Scribe
 
+[![Tests](https://github.com/aashish177/Digital-Scribe/actions/workflows/tests.yml/badge.svg)](https://github.com/aashish177/Digital-Scribe/actions/workflows/tests.yml)
+
 An autonomous AI content creation system that orchestrates 5 specialized agents using LangGraph to produce high-quality, SEO-optimized content. The system leverages Retrieval-Augmented Generation (RAG) with ChromaDB to ground outputs in factual information and brand guidelines.
 
 ## Overview
@@ -49,59 +51,26 @@ User Request → Planner → [Approval] → Researcher → Writer → Editor →
 - `style_guide`: Brand voice and formatting guidelines
 - `seo_data`: Keywords, competitor analysis, and SERP data
 
-## Project Status
+### Knowledge Base
 
-### ✅ Completed (Phase 1)
+The `research_docs` collection is built from 20 Wikipedia articles across 4 topics, stored as plain text in `data/sources/`:
 
-- [x] Core agent implementations (Planner, Researcher, Writer, Editor, SEO)
-- [x] Base agent architecture with LLM integration
-- [x] ChromaDB vector store manager with 4 collections
-- [x] LangGraph workflow with conditional routing
-- [x] State management system with TypedDict
-- [x] Data ingestion pipeline with text chunking
-- [x] Configuration management with environment variables
-- [x] Mock data generation for testing
+| Topic | Articles |
+|---|---|
+| Tea and coffee | Green tea, Coffee, Caffeine, Theanine, Catechin |
+| Renewable energy | Solar power, Wind power, Heat pump, Lithium-ion battery, Grid energy storage |
+| Sleep | Sleep, Circadian rhythm, Melatonin, Insomnia, Sleep deprivation |
+| Space exploration | James Webb Space Telescope, Exoplanet, Mars rover, Artemis program, SpaceX Starship |
 
-### ✅ Completed (Phase 2)
+Each file records its source URL and revision ID. Run `python scripts/fetch_sources.py` to refresh them. Article text is from [Wikipedia](https://en.wikipedia.org/) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
-#### ✅ Phase 2A: Foundation
-- [x] Error handling infrastructure with structured error classes
-- [x] Retry utilities with exponential backoff and jitter
-- [x] Comprehensive logging system (JSON and human-readable formats)
-- [x] Request ID tracking across pipeline execution
-- [x] Execution time measurement for all agents
-- [x] Log rotation and multiple log handlers
+The style guide, writing samples and SEO data are small sample documents in `data/ingest.py`.
 
-#### ✅ Phase 2B: Basic CLI Interface
-- [x] CLI argument parser for content generation
-- [x] Progress indicators for agent execution
-- [x] Verbose and debug modes
-- [x] Basic output formatting
+## Status
 
-#### ✅ Phase 2C: Output Management & Quality Metrics
-- [x] Multi-format exports (Markdown, JSON, HTML)
-- [x] Audit trail system
-- [x] Quality scoring and confidence metrics
-- [x] Enhanced output organization
+The pipeline, CLI, REST API and web UI are in place. Unit tests run in CI with mocked LLM calls.
 
-#### ✅ Phase 2D: Testing & Documentation
-- [x] Comprehensive unit and integration test suite (pytest)
-- [x] CLI usage guide with Recipes
-- [x] Updated architecture documentation
-
-### ✅ Completed (Phase 3: API & Modalities)
-- [x] **REST API**: FastAPI implementation with async execution and Webhooks
-- [x] **Web Dashboard**: Real-time progress tracking via SSE & glassmorphic UI
-- [x] **HITL**: Manual approval flow for content briefs
-- [x] **Advanced RAG**: Hybrid search (Vector + BM25) and FlashRank reranking
-- [x] **New Modalities**: Translation, Social Media posts, and Image generation agents
-- [x] **Batch Processing**: Simultaneous generation for multiple requests
-
-### 📋 Planned (Phase 4+)
-- [ ] Dockerization and deployment orchestration
-- [ ] Multi-user authentication & workspace management
-- [ ] Custom style guide training/fine-tuning
-- [ ] Integration with CMS platforms (WordPress, Ghost, etc.)
+**In progress:** an evaluation suite that measures faithfulness to sources, citation accuracy and retrieval recall, and compares the full pipeline against a single-prompt baseline. Results will be added here.
 
 ## Installation
 
@@ -115,34 +84,31 @@ User Request → Planner → [Approval] → Researcher → Writer → Editor →
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd content-generation
+   git clone https://github.com/aashish177/Digital-Scribe.git
+   cd Digital-Scribe
    ```
 
 2. **Install dependencies**
-   
-   Using UV:
    ```bash
    uv sync
    ```
-   
-   Or using pip:
-   ```bash
-   pip install -e .
-   ```
 
 3. **Configure environment variables**
-   
-   Create a `.env` file in the project root:
-   ```env
-   OPENAI_API_KEY=your_openai_api_key_here
-   VECTORDB_PATH=./data/vectordb
+   ```bash
+   cp .env.example .env
+   ```
+   Then set `OPENAI_API_KEY` in `.env`.
+
+4. **Load the knowledge base into ChromaDB**
+   ```bash
+   uv run python data/ingest.py
    ```
 
-4. **Ingest sample data**
+5. **Start the web UI (optional)**
    ```bash
-   python data/ingest.py
+   uv run uvicorn api.main:app --host 127.0.0.1 --port 8000
    ```
+   Open http://127.0.0.1:8000/. Run this from the repo root so the UI files are found.
 
 ## Usage Guide
 
@@ -204,7 +170,7 @@ state = initialize_state(
     settings={"word_count": 1000, "tone": "informative"}
 )
 
-result = app.invoke(state)
+result = app.invoke(state, config={"configurable": {"thread_id": state["request_id"]}})
 print(f"Request ID: {result['request_id']}")
 print(f"Final Content: {result['final_content']}")
 ```
@@ -217,29 +183,20 @@ print(f"Final Content: {result['final_content']}")
 ## Project Structure
 
 ```
-content-generation/
-├── agents/              # AI agent implementations
-│   ├── base.py         # Base agent class
-│   ├── planner.py      # Planning agent
-│   ├── researcher.py   # Research agent
-│   ├── writer.py       # Writing agent
-│   ├── editor.py       # Editing agent
-│   └── seo.py          # SEO optimization agent
-├── graph/              # LangGraph workflow
-│   ├── state.py        # State management
-│   ├── workflow.py     # Workflow definition
-│   ├── nodes.py        # Agent nodes
-│   └── edges.py        # Conditional routing
-├── vector_stores/      # Vector database management
-│   └── chroma.py       # ChromaDB manager
-├── data/               # Data and vector storage
-│   ├── ingest.py       # Data ingestion script
-│   └── vectordb/       # ChromaDB persistent storage
-├── skills/             # Agent skill documentation
-├── outputs/            # Generated content outputs
-├── config.py           # Configuration management
-├── models.py           # Data models
-└── main.py            # Entry point (WIP)
+Digital-Scribe/
+├── agents/             # Planner, researcher, writer, editor, SEO, translator, social media, image prompts
+├── graph/              # LangGraph state, nodes, edges and workflow
+├── vector_stores/      # ChromaDB manager with hybrid search and reranking
+├── api/                # FastAPI app with SSE status streaming
+├── frontend/           # Web UI served by the API
+├── data/
+│   ├── sources/        # Knowledge base articles (Wikipedia)
+│   └── ingest.py       # Loads all collections into ChromaDB
+├── scripts/            # Source fetcher and smoke scripts that call real LLMs
+├── tests/              # Unit tests (pytest)
+├── utils/              # Quality metrics, exporters, audit log, retries
+├── cli.py              # Command line interface
+└── config.py           # Settings and environment variables
 ```
 
 ## Configuration
@@ -254,20 +211,23 @@ content-generation/
 
 ### RAG Settings
 
-- **Chunk Size**: 1000 tokens
-- **Chunk Overlap**: 200 tokens
-- **Retrieval K**: 5 documents per query
+- **Chunking**: 500 characters with 50 characters of overlap (`data/ingest.py`)
+- **Retrieval**: dense and BM25 candidates are merged, reranked with FlashRank, and the top 4 are returned per query
 
 ## Development
 
 ### Running Tests
 
 ```bash
-# Test individual agents
-python test_planner.py
+# Unit tests, no API key needed
+uv run pytest
 
-# Verify workflow
-python verify_workflow.py
+# Include tests that call real LLMs
+RUN_INTEGRATION=1 uv run pytest
+
+# End-to-end smoke runs (call real LLMs)
+uv run python -m scripts.smoke_workflow
+uv run python scripts/smoke_cli.py
 ```
 
 ### Adding New Documents to Vector Store
@@ -288,15 +248,6 @@ docs = [
 
 db.add_documents("research", docs)
 ```
-
-## Performance Targets
-
-- **End-to-end pipeline**: 2-5 minutes for 1500-word content
-- **Planning**: <10 seconds
-- **Research**: 20-40 seconds
-- **Writing**: 60-120 seconds
-- **Editing**: 30-60 seconds
-- **SEO**: 15-30 seconds
 
 ## Acknowledgments
 
