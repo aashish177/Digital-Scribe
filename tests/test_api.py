@@ -1,7 +1,13 @@
+import os
 import pytest
 from fastapi.testclient import TestClient
 from api.main import app
 import time
+
+# Calls real LLMs; run with RUN_INTEGRATION=1 and a real OPENAI_API_KEY.
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_INTEGRATION") != "1", reason="integration test, set RUN_INTEGRATION=1"
+)
 
 client = TestClient(app)
 
