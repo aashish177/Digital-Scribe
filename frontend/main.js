@@ -417,6 +417,9 @@ function renderDetail() {
         image_gen: 'Suggests a cover image concept',
     };
     box.append(el('div', 'muted', blurbs[node]));
+    if (s.model) {
+        box.append(el('div', 'model-tag', s.fallback ? `${s.model} · retried on the strong model` : s.model));
+    }
 
     const kv = el('div', 'kv');
     [[s.duration != null ? `${s.duration.toFixed(1)}s` : '—', 'Time'],

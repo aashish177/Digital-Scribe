@@ -26,6 +26,14 @@ def _usage(execution_times: dict, agent) -> dict:
     if not isinstance(usage, dict):
         return {}
     usage = dict(usage)
+    model = getattr(agent, "model", None)
+    if isinstance(model, str):
+        usage["model"] = model
+        by_model = getattr(agent, "usage_by_model", None)
+        if isinstance(by_model, dict) and by_model:
+            usage["by_model"] = {m: dict(u) for m, u in by_model.items()}
+        if getattr(agent, "fallback_used", False) is True:
+            usage["fallback"] = True
     total = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
     return {"token_usage": {name: total}, "usage": {name: usage}}
 

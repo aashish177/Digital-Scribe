@@ -5,12 +5,22 @@ from config import Config
 AGENT_ORDER = ["planner", "researcher", "writer", "editor", "seo", "translator", "social_media", "image_gen"]
 
 
-def estimate_cost(usage: Optional[Dict[str, int]]) -> Optional[float]:
-    prices = Config.MODEL_PRICES.get(Config.MODEL_NAME)
-    if not usage or not prices:
+def _cost(input_tokens: int, output_tokens: int, model: Optional[str]) -> Optional[float]:
+    prices = Config.price_for(model) if model else None
+    if not prices:
         return None
-    cost = usage.get("input_tokens", 0) * prices[0] + usage.get("output_tokens", 0) * prices[1]
-    return round(cost / 1_000_000, 5)
+    return (input_tokens * prices[0] + output_tokens * prices[1]) / 1_000_000
+
+
+def estimate_cost(usage: Optional[Dict[str, Any]]) -> Optional[float]:
+    """Cost of one agent's usage, priced per model when it used more than one."""
+    if not usage:
+        return None
+    parts = usage.get("by_model") or {usage.get("model") or Config.STRONG_MODEL: usage}
+    costs = [_cost(u.get("input_tokens", 0), u.get("output_tokens", 0), m) for m, u in parts.items()]
+    if any(c is None for c in costs):
+        return None
+    return round(sum(costs), 5)
 
 
 def _chunks(docs: List[Dict], limit: int = 6) -> List[Dict]:
@@ -43,6 +53,10 @@ def summarize_node(node: str, output: Optional[Dict[str, Any]]) -> Dict[str, Any
     if usage:
         summary["usage"] = usage
         summary["cost"] = estimate_cost(usage)
+        if usage.get("model"):
+            summary["model"] = usage["model"]
+        if usage.get("fallback"):
+            summary["fallback"] = True
     if output.get("errors"):
         summary["errors"] = output["errors"]
 
@@ -103,9 +117,11 @@ def run_totals(state: Dict[str, Any]) -> Dict[str, Any]:
         "input_tokens": sum(u.get("input_tokens", 0) for u in usage.values()),
         "output_tokens": sum(u.get("output_tokens", 0) for u in usage.values()),
     }
+    costs = [estimate_cost(u) for u in usage.values()]
+    models = sorted({u.get("model") for u in usage.values() if u.get("model")})
     return {
         "duration": round(sum((state.get("execution_times") or {}).values()), 2),
         "tokens": total["input_tokens"] + total["output_tokens"],
-        "cost": estimate_cost(total) if usage else None,
-        "model": Config.MODEL_NAME,
+        "cost": round(sum(costs), 5) if costs and all(c is not None for c in costs) else None,
+        "model": " + ".join(models) if models else None,
     }

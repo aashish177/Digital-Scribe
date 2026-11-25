@@ -420,6 +420,11 @@ textarea:focus, input:focus, select:focus {
 .chunk { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
 .chunk-src { display: flex; justify-content: space-between; gap: 8px; font-size: .78rem; color: var(--muted); margin-bottom: 3px; }
 .chunk-score { color: var(--ok); font-variant-numeric: tabular-nums; }
+.model-tag {
+    display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px;
+    background: var(--surface); color: var(--ink-2);
+    font-family: ui-monospace, Menlo, monospace; font-size: .75rem;
+}
 .q { font-family: ui-monospace, Menlo, monospace; font-size: .8rem; background: var(--surface); border-radius: 6px; padding: 2px 6px; display: inline-block; margin: 0 4px 4px 0; }
 .detail ul { padding-left: 18px; }
 .detail .pre { white-space: pre-wrap; }

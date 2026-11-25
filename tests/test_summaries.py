@@ -39,7 +39,7 @@ def test_skipped_node_output_is_marked_skipped():
 
 
 def test_cost_uses_model_prices():
-    assert estimate_cost({"input_tokens": 1_000_000, "output_tokens": 0}) == 2.5
+    assert estimate_cost({"input_tokens": 1_000_000, "output_tokens": 0, "model": "gpt-4o"}) == 2.5
     assert estimate_cost(None) is None
 
 
