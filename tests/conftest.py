@@ -25,7 +25,7 @@ class FakeAgent:
     def write(self, brief, research, sources=None):
         return "word " * 60
 
-    def edit(self, draft, brief):
+    def edit(self, draft, brief, findings=""):
         return draft, "- tightened"
 
     def optimize(self, content, brief):

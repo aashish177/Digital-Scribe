@@ -232,7 +232,8 @@ def editing_node(state: ContentState) -> ContentState:
         agent = EditorAgent()
         edited, notes = agent.edit(
             draft=state.get("draft_content", ""),
-            brief=state.get("brief", {})
+            brief=state.get("brief", {}),
+            findings=state.get("research_findings") or "",
         )
         
         duration = time.time() - start_time
