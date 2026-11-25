@@ -14,10 +14,17 @@ def run(settings=None):
 
 
 def test_writer_retries_are_capped(fake_agents, mocker):
-    calls = mocker.patch.object(fake_agents, "write", return_value="too short")
+    calls = mocker.patch.object(fake_agents, "write", return_value="word " * 20)
     nodes, state = run()
     assert calls.call_count == Config.MAX_WRITER_ATTEMPTS
     assert "editor" in nodes
+
+
+def test_writer_question_instead_of_article_stops_run(fake_agents, mocker):
+    mocker.patch.object(fake_agents, "write", return_value="Do you mean Halvard Lighting?")
+    nodes, state = run()
+    assert "editor" not in nodes
+    assert state["errors"][0].startswith("The writer returned only 5 words")
 
 
 def test_writer_error_stops_after_cap(fake_agents, mocker):
@@ -37,7 +44,7 @@ def test_planner_error_stops_pipeline(fake_agents, mocker):
 
 def test_sources_are_numbered_for_citations(fake_agents):
     _, state = run()
-    assert state["sources"] == [{"n": 1, "title": "Heat pump", "url": "https://en.wikipedia.org/wiki/Heat_pump"}]
+    assert state["sources"] == [{"n": 1, "title": "Heat pump", "url": "https://en.wikipedia.org/wiki/Heat_pump", "page": None}]
 
 
 @pytest.fixture

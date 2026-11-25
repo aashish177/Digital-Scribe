@@ -32,6 +32,19 @@ class Config:
     CHUNK_SIZE = 1000
     CHUNK_OVERLAP = 200
     RETRIEVAL_K = 5
+    # A query counts as covered when its closest chunk has at least this cosine
+    # similarity (text-embedding-3-small). Rerank scores order chunks but don't gate them.
+    MIN_QUERY_SIMILARITY = float(os.getenv("MIN_QUERY_SIMILARITY", "0.35"))
+
+    # Uploaded documents
+    UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+    UPLOAD_MAX_FILES = 5
+    UPLOAD_MAX_PAGES = 200
+    UPLOAD_MAX_CHUNKS = 2000  # per file, bounds embedding cost
+    UPLOAD_PARSE_TIMEOUT = 30.0
+    WORKSPACE_TTL_SECONDS = 24 * 3600
+    MAX_WORKSPACES = 50
+    DOC_PREVIEW_CHARS = 300  # opening text of each upload, shown to the planner
     
     # Logging Configuration
     LOG_DIR = os.getenv("LOG_DIR", "logs")
@@ -44,6 +57,7 @@ class Config:
     RETRY_MAX_DELAY = float(os.getenv("RETRY_MAX_DELAY", "60.0"))
     REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "120"))
     MAX_WRITER_ATTEMPTS = 2
+    MIN_DRAFT_RATIO = 0.25  # of the target word count, after the last attempt
 
     # API limits
     MAX_JOBS_IN_MEMORY = 200

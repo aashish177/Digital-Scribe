@@ -3,13 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, HttpUrl
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 from sse_starlette.sse import EventSourceResponse
 from graph.workflow import create_content_workflow, initialize_state
 from api.summaries import AGENT_ORDER, summarize_node, summarize_run, run_totals
+from api.workspaces import router as workspaces_router, get_workspace, drop_orphaned_collections
+from vector_stores.chroma import workspace_collection
 from config import Config
 import json
 import logging
+import re
 import uuid
 import sys
 import os
@@ -31,9 +34,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=Config.ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
 )
+app.include_router(workspaces_router)
 
 # Setup initial configurations
 setup_logging(level="INFO")
@@ -82,6 +86,14 @@ class NotificationManager:
 
 notifications = NotificationManager()
 
+
+@app.on_event("startup")
+async def clear_orphaned_workspaces():
+    try:
+        await asyncio.to_thread(drop_orphaned_collections)
+    except Exception as e:
+        logger.warning(f"Could not clear old workspace collections: {e}")
+
 class GenerationRequest(BaseModel):
     request: str = Field(min_length=3, max_length=1000)
     word_count: Optional[int] = Field(default=800, ge=50, le=2000)
@@ -91,6 +103,8 @@ class GenerationRequest(BaseModel):
     languages: Optional[List[str]] = Field(default_factory=list, max_length=3)
     generate_image: Optional[bool] = True
     generate_social_posts: Optional[bool] = True
+    source: Literal["builtin", "documents"] = "builtin"
+    workspace_id: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
 async def send_webhook(url: str, payload: dict):
     try:
@@ -165,13 +179,25 @@ async def run_pipeline(request_id: str, content_request: str, settings: dict, we
 async def generate_content(req: GenerationRequest, background_tasks: BackgroundTasks):
     if req.webhook_url and not webhook_allowed(req.webhook_url):
         raise HTTPException(status_code=400, detail="webhook_url host is not allowed")
+    collection = "research"
+    overview = []
+    if req.source == "documents":
+        if not req.workspace_id:
+            raise HTTPException(status_code=400, detail="workspace_id is required when source is documents")
+        docs = get_workspace(req.workspace_id)["docs"]
+        if not docs:
+            raise HTTPException(status_code=400, detail="Upload at least one document first")
+        collection = workspace_collection(req.workspace_id)
+        overview = [{"name": d["name"], "preview": d.get("preview", "")} for d in docs.values()]
     request_id = str(uuid.uuid4())
     settings = {
         "word_count": req.word_count,
         "tone": req.tone,
         "languages": [lang.strip()[:30] for lang in req.languages or [] if lang.strip()],
         "generate_image": req.generate_image,
-        "generate_social_posts": req.generate_social_posts
+        "generate_social_posts": req.generate_social_posts,
+        "collection": collection,
+        "source_overview": overview,
     }
     add_job(request_id, {"status": "pending", "request": req.request, "settings": settings, "result": None, "error": None})
     background_tasks.add_task(run_pipeline, request_id, req.request, settings, req.webhook_url, req.require_approval)
@@ -278,6 +304,9 @@ async def get_content(request_id: str):
         if url and url not in sources:
             sources[url] = {"title": meta.get("title") or url, "url": url}
     source_list = result.get("sources") or list(sources.values())
+    cited = {int(n) for n in re.findall(r"\[(\d+)\]", result.get("final_content") or "")}
+    if cited & {s.get("n") for s in source_list}:
+        source_list = [s for s in source_list if s.get("n") in cited]
     return {
         "request_id": request_id,
         "final_content": result.get("final_content"),
@@ -287,6 +316,7 @@ async def get_content(request_id: str):
         "social_media_posts": result.get("social_media_posts"),
         "generated_images": result.get("generated_images"),
         "sources": source_list,
+        "source_kind": "documents" if (job.get("settings") or {}).get("collection", "research") != "research" else "builtin",
         "execution_times": result.get("execution_times") or {},
         "edit_notes": result.get("edit_notes"),
         "agents": summarize_run(result),

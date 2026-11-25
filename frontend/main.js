@@ -80,6 +80,170 @@ document.querySelectorAll('.chip[data-example]').forEach(chip => {
     });
 });
 
+// Your documents
+const WS_KEY = 'ds-workspace';
+const MAX_FILES = 5;
+const MAX_BYTES = 10 * 1024 * 1024;
+const ALLOWED_EXT = ['.md', '.markdown', '.txt', '.pdf'];
+let workspaceId = null;
+let docs = []; // {doc_id?, name, size, chunks?, pages?, status: uploading|ready|failed, error?}
+
+try { workspaceId = sessionStorage.getItem(WS_KEY); } catch (e) { /* storage can be blocked */ }
+
+async function errorDetail(res) {
+    try {
+        const body = await res.json();
+        if (typeof body.detail === 'string') return body.detail;
+        if (Array.isArray(body.detail) && body.detail[0]?.msg) return body.detail[0].msg;
+    } catch (e) { /* not JSON */ }
+    return `HTTP ${res.status}`;
+}
+
+function readyDocs() {
+    return docs.filter(d => d.status === 'ready');
+}
+
+function formatSize(bytes) {
+    return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function renderDocs(notice) {
+    const list = $('doc-list');
+    list.innerHTML = '';
+    docs.forEach((d) => {
+        const li = el('li', `doc ${d.status}`);
+        li.append(el('span', 'doc-name', d.name));
+        let meta = formatSize(d.size);
+        if (d.status === 'uploading') meta = 'Indexing…';
+        if (d.status === 'ready' && d.pages) meta += ` · ${d.pages} pages`;
+        if (d.status === 'failed') meta = d.error || 'Failed';
+        li.append(el('span', 'doc-meta', meta));
+        if (d.status !== 'uploading') {
+            const btn = el('button', 'doc-remove', '×');
+            btn.type = 'button';
+            btn.title = `Remove ${d.name}`;
+            btn.setAttribute('aria-label', `Remove ${d.name}`);
+            btn.addEventListener('click', () => removeDoc(d));
+            li.append(btn);
+        }
+        list.append(li);
+    });
+    if (notice) {
+        const li = el('li', 'doc failed');
+        li.append(el('span', 'doc-meta', notice));
+        list.append(li);
+    }
+    const active = docs.filter(d => d.status !== 'failed').length;
+    $('drop-zone').classList.toggle('disabled', active >= MAX_FILES);
+}
+
+let workspacePromise = null;
+
+async function ensureWorkspace() {
+    if (workspaceId) return workspaceId;
+    // Parallel uploads must share one workspace, so they wait on the same request.
+    workspacePromise = workspacePromise || (async () => {
+        const res = await fetch('/api/v1/workspaces', { method: 'POST' });
+        if (!res.ok) throw new Error(await errorDetail(res));
+        workspaceId = (await res.json()).workspace_id;
+        try { sessionStorage.setItem(WS_KEY, workspaceId); } catch (e) { /* storage can be blocked */ }
+        return workspaceId;
+    })().finally(() => { workspacePromise = null; });
+    return workspacePromise;
+}
+
+async function loadDocs() {
+    if (!workspaceId) return;
+    const res = await fetch(`/api/v1/workspaces/${workspaceId}/documents`);
+    if (res.status === 404) {
+        workspaceId = null;
+        try { sessionStorage.removeItem(WS_KEY); } catch (e) { /* ignore */ }
+        docs = [];
+    } else if (res.ok) {
+        docs = (await res.json()).documents.map(d => ({ ...d, status: 'ready' }));
+    }
+    renderDocs();
+}
+
+async function uploadOne(entry, file, retried = false) {
+    try {
+        const id = await ensureWorkspace();
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch(`/api/v1/workspaces/${id}/documents`, { method: 'POST', body: form });
+        if (res.status === 404 && !retried) {
+            // The workspace expired; start a new one once.
+            workspaceId = null;
+            return uploadOne(entry, file, true);
+        }
+        if (!res.ok) throw new Error(await errorDetail(res));
+        Object.assign(entry, await res.json(), { status: 'ready' });
+    } catch (err) {
+        Object.assign(entry, { status: 'failed', error: err.message || String(err) });
+    }
+    renderDocs();
+}
+
+function addFiles(fileList) {
+    let room = MAX_FILES - docs.filter(d => d.status !== 'failed').length;
+    docs = docs.filter(d => d.status !== 'failed');
+    for (const file of fileList) {
+        const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+        const entry = { name: file.name, size: file.size, status: 'uploading' };
+        if (room <= 0) {
+            Object.assign(entry, { status: 'failed', error: `At most ${MAX_FILES} files` });
+        } else if (!ALLOWED_EXT.includes(ext)) {
+            Object.assign(entry, { status: 'failed', error: 'Use .md, .txt or .pdf' });
+        } else if (file.size > MAX_BYTES) {
+            Object.assign(entry, { status: 'failed', error: 'Larger than 10 MB' });
+        } else if (docs.some(d => d.name === file.name && d.status !== 'failed')) {
+            Object.assign(entry, { status: 'failed', error: 'Already uploaded' });
+        } else {
+            room -= 1;
+        }
+        docs.push(entry);
+        if (entry.status === 'uploading') uploadOne(entry, file);
+    }
+    renderDocs();
+}
+
+async function removeDoc(d) {
+    if (!docs.includes(d)) return;
+    if (d.status === 'ready' && workspaceId) {
+        const res = await fetch(`/api/v1/workspaces/${workspaceId}/documents/${d.doc_id}`, { method: 'DELETE' });
+        if (!res.ok && res.status !== 404) {
+            renderDocs(`Could not remove ${d.name}: ${await errorDetail(res)}`);
+            return;
+        }
+    }
+    docs.splice(docs.indexOf(d), 1);
+    renderDocs();
+}
+
+function applySource() {
+    const useDocs = selectedSource() === 'documents';
+    $('docs-panel').classList.toggle('hidden', !useDocs);
+    $('kb-examples').classList.toggle('hidden', useDocs);
+    $('request').placeholder = useDocs
+        ? 'e.g. A customer-facing summary of what changed in the latest release'
+        : "e.g. A beginner's guide to how heat pumps work";
+    if (useDocs) loadDocs();
+}
+
+document.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', applySource));
+$('file-input').addEventListener('change', (e) => {
+    addFiles(e.target.files);
+    e.target.value = '';
+});
+const dropZone = $('drop-zone');
+dropZone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file-input').click(); }
+});
+['dragenter', 'dragover'].forEach(t => dropZone.addEventListener(t, (e) => { e.preventDefault(); dropZone.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => dropZone.addEventListener(t, (e) => { e.preventDefault(); dropZone.classList.remove('over'); }));
+dropZone.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
+applySource();
+
 // Steps
 function resetSteps() {
     Object.values(steps).forEach(s => s.classList.remove('active', 'completed', 'skipped'));
@@ -108,17 +272,28 @@ function markCompleted(node, summary) {
         if (n === node && summary && summary.skipped) {
             steps[n].classList.add('skipped');
             agentStatus[n] = 'skip';
-        } else {
+        } else if (n === node) {
             steps[n].classList.add('completed');
             agentStatus[n] = summary && summary.errors ? 'err' : 'done';
+        } else if (agentStatus[n] !== 'skip' && agentStatus[n] !== 'err') {
+            steps[n].classList.add('completed');
+            agentStatus[n] = 'done';
         }
     });
     if (summary) agentData[node] = summary;
-    if (!parallel) {
+    if (!parallel && !(summary && summary.errors)) {
         const next = node === 'seo' ? PARALLEL : [STEP_ORDER[idx + 1]].filter(Boolean);
         next.forEach(markActive);
     }
     if (!selectedPinned && !(summary && summary.skipped)) selectedAgent = node;
+    renderAgents();
+}
+
+function stopRunningSteps() {
+    STEP_ORDER.forEach(n => {
+        if (steps[n]) steps[n].classList.remove('active');
+        if (agentStatus[n] === 'run') agentStatus[n] = 'wait';
+    });
     renderAgents();
 }
 
@@ -272,7 +447,8 @@ function renderDetail() {
         s.chunks.forEach(c => {
             const card = el('div', 'chunk');
             const src = el('div', 'chunk-src');
-            src.append(el('span', null, c.title), el('span', 'chunk-score', c.score != null ? c.score.toFixed(2) : ''));
+            src.append(el('span', null, `${c.citation ? `[${c.citation}] ` : ''}${c.title}${c.page ? `, p. ${c.page}` : ''}`),
+                el('span', 'chunk-score', c.score != null ? c.score.toFixed(2) : ''));
             card.append(src, el('div', null, c.text + (c.text.length >= 240 ? '…' : '')));
             box.append(card);
         });
@@ -414,6 +590,7 @@ function connectStream(requestId) {
                 setStatus('Failed', 'err');
                 progressTitle.textContent = 'Something went wrong';
                 log(`Error: ${data.error}`, 'error');
+                stopRunningSteps();
                 submitBtn.disabled = false;
                 break;
         }
@@ -439,6 +616,7 @@ async function pollStatus(requestId) {
         } else if (data.status === 'failed') {
             setStatus('Failed', 'err');
             log(`Error: ${data.error}`, 'error');
+            stopRunningSteps();
         } else if (data.status === 'processing' || data.status === 'pending') {
             setTimeout(() => pollStatus(requestId), 3000);
         }
@@ -525,6 +703,12 @@ function renderSources(sources) {
     sources.forEach(s => {
         const li = document.createElement('li');
         if (Number.isInteger(s.n)) li.value = s.n;
+        if (!/^https?:\/\//.test(s.url || '')) {
+            li.append(el('span', 'source-file', s.title));
+            if (s.quote) li.append(el('div', 'source-quote', `“${s.quote}${s.quote.length >= 200 ? '…' : ''}”`));
+            list.appendChild(li);
+            return;
+        }
         const a = document.createElement('a');
         a.textContent = s.title;
         if (/^https?:\/\//.test(s.url)) {
@@ -634,8 +818,17 @@ $('new-request-btn').addEventListener('click', () => {
 });
 
 // Submit
+function selectedSource() {
+    return document.querySelector('input[name="source"]:checked').value;
+}
+
 genForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const source = selectedSource();
+    if (source === 'documents' && !readyDocs().length) {
+        renderDocs('Upload at least one document first.');
+        return;
+    }
     const payload = {
         request: $('request').value.trim(),
         word_count: parseInt($('word_count').value, 10),
@@ -644,6 +837,8 @@ genForm.addEventListener('submit', async (e) => {
         generate_image: $('gen_image').checked,
         generate_social_posts: $('gen_social').checked,
         languages: $('languages').value.split(',').map(s => s.trim()).filter(Boolean),
+        source,
+        ...(source === 'documents' ? { workspace_id: workspaceId } : {}),
     };
     if (!payload.request) return;
 
@@ -664,7 +859,7 @@ genForm.addEventListener('submit', async (e) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error(await errorDetail(res));
         const data = await res.json();
         currentRequestId = data.request_id;
         log(`Request ${currentRequestId.slice(0, 8)}`);

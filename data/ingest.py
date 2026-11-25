@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from ingestion.parse import splitter
 from vector_stores.chroma import ChromaDBManager
 
 SOURCES_DIR = Path(__file__).parent / "sources"
@@ -114,12 +114,6 @@ def ingest_data():
         return
 
     data = create_mock_data()
-    
-    # Text splitter for chunking
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50
-    )
     
     for collection_type, documents in data.items():
         print(f"Processing collection: {collection_type}...")

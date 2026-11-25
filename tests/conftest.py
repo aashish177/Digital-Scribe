@@ -14,10 +14,10 @@ class FakeAgent:
     def __init__(self, *args, **kwargs):
         self.usage = dict(USAGE)
 
-    def plan(self, request):
+    def plan(self, request, documents=None):
         return {"title": "T", "outline": ["a", "b"], "word_count_target": 50, "research_queries": ["q1", "q2"]}
 
-    def research(self, queries):
+    def research(self, queries, collection="research"):
         doc = {"content": "chunk", "metadata": {"title": "Heat pump", "source": "https://en.wikipedia.org/wiki/Heat_pump",
                                                 "relevance_score": 0.9, "citation": 1}}
         return "findings [1]", [doc]

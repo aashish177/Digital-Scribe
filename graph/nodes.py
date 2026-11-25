@@ -3,7 +3,7 @@ import logging
 import time
 from graph.state import ContentState
 from agents.planner import PlannerAgent
-from agents.researcher import ResearchAgent
+from agents.researcher import ResearchAgent, citation_label
 from agents.writer import WriterAgent
 from agents.editor import EditorAgent
 from agents.seo import SEOAgent
@@ -14,6 +14,10 @@ from errors import AgentError, PlannerError, ResearcherError, WriterError, Edito
 from config import Config
 
 logger = logging.getLogger(__name__)
+
+
+class NoRelevantSources(Exception):
+    """Retrieval found nothing above the relevance cutoff."""
 
 
 def _usage(execution_times: dict, agent) -> dict:
@@ -35,7 +39,7 @@ def planning_node(state: ContentState) -> ContentState:
     try:
         agent = PlannerAgent()
         request = state.get("content_request", "")
-        brief = agent.plan(request)
+        brief = agent.plan(request, (state.get("settings") or {}).get("source_overview"))
 
         # Override brief with any user-supplied settings (word_count, tone)
         settings = state.get("settings") or {}
@@ -90,20 +94,30 @@ def research_node(state: ContentState) -> ContentState:
     
     try:
         agent = ResearchAgent()
-        queries = state.get("research_queries", [])
-        
-        # Fallback if no queries
-        if not queries:
-            queries = [state["content_request"]]
+        queries = list(state.get("research_queries") or [])
+        # The planner hasn't seen the documents and can misread names
+        # (e.g. "Lumen" as the unit), so the user's own wording is always searched.
+        request = (state.get("content_request") or "").strip()
+        if request and request.lower() not in {q.lower() for q in queries}:
+            queries.insert(0, request)
             
-        findings, docs = agent.research(queries)
+        settings = state.get("settings") or {}
+        collection = settings.get("collection") or "research"
+        findings, docs = agent.research(queries, collection=collection)
+        if not docs:
+            where = "your documents" if collection != "research" else "the built-in knowledge base"
+            raise NoRelevantSources(f"No relevant passages in {where} for this topic. "
+                                    "Try a topic the documents cover, or switch sources.")
         sources = {}
         for doc in docs:
             meta = doc.get("metadata") or {}
             n = meta.get("citation")
             if n is not None and n not in sources:
                 url = meta.get("source") or doc.get("source")
-                sources[n] = {"n": n, "title": meta.get("title") or url or f"Source {n}", "url": url}
+                sources[n] = {"n": n, "title": citation_label(meta) if meta.get("title") else url or f"Source {n}",
+                              "url": url, "page": meta.get("page")}
+                if meta.get("doc_id"):
+                    sources[n]["quote"] = " ".join((doc.get("content") or "").split())[:200]
         
         duration = time.time() - start_time
         execution_times = {}
@@ -128,6 +142,9 @@ def research_node(state: ContentState) -> ContentState:
             }]
         }
         
+    except NoRelevantSources as e:
+        logger.info(f"[{request_id[:8]}] Research found nothing relevant")
+        return {"errors": [str(e)], "execution_times": {"researcher": time.time() - start_time}}
     except Exception as e:
         duration = time.time() - start_time
         logger.error(
@@ -164,7 +181,7 @@ def writing_node(state: ContentState) -> ContentState:
             extra={"extra_data": {"duration": duration, "word_count": word_count}}
         )
         
-        return {
+        result = {
             "draft_content": draft,
             "writer_attempts": attempts,
             "execution_times": execution_times,
@@ -176,6 +193,12 @@ def writing_node(state: ContentState) -> ContentState:
                 "word_count": word_count
             }]
         }
+        # A reply this short on the last attempt is a question or refusal, not an article.
+        target = (state.get("brief") or {}).get("word_count_target", 800)
+        if attempts >= Config.MAX_WRITER_ATTEMPTS and word_count < target * Config.MIN_DRAFT_RATIO:
+            result["errors"] = [f"The writer returned only {word_count} words after {attempts} attempts. "
+                                "Try a more specific topic."]
+        return result
         
     except Exception as e:
         duration = time.time() - start_time

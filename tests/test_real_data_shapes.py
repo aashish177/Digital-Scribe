@@ -20,7 +20,7 @@ def test_stream_events_are_json():
 def test_rerank_scores_are_plain_floats(tmp_path, mocker):
     manager = ChromaDBManager(persistent_path=str(tmp_path))
     store = MagicMock()
-    store.similarity_search.return_value = [Document(page_content="a"), Document(page_content="b")]
+    store.similarity_search_with_score.return_value = [(Document(page_content="a"), 0.4), (Document(page_content="b"), 0.6)]
     mocker.patch.object(manager, "get_vector_store", return_value=store)
     mocker.patch.object(manager, "get_bm25_retriever", return_value=None)
     reranker = MagicMock()

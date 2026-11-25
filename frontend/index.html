@@ -24,12 +24,28 @@
         <!-- Composer -->
         <section id="request-section" class="composer">
             <h1>What should we write about?</h1>
-            <p class="lede">Agents plan the piece, research a curated knowledge base, write, edit and tune it for search.</p>
+            <p class="lede">Agents plan the piece, research your sources, write, edit and tune it for search.</p>
 
             <form id="gen-form">
+                <div class="source-switch" role="radiogroup" aria-label="Write from">
+                    <span class="examples-label">Write from:</span>
+                    <label class="seg"><input type="radio" name="source" value="builtin" checked> Built-in knowledge base</label>
+                    <label class="seg"><input type="radio" name="source" value="documents"> My documents</label>
+                </div>
+
+                <div id="docs-panel" class="docs hidden">
+                    <label id="drop-zone" class="drop" tabindex="0">
+                        <input type="file" id="file-input" accept=".md,.markdown,.txt,.pdf" multiple hidden>
+                        <strong>Drop files here or click to choose</strong>
+                        <span class="muted">.md, .txt or .pdf · up to 5 files, 10 MB each</span>
+                    </label>
+                    <ul id="doc-list" class="doc-list"></ul>
+                    <p class="privacy muted">Files are sent to OpenAI to index and write from. They're deleted after 24 hours, or when you remove them.</p>
+                </div>
+
                 <textarea id="request" rows="3" placeholder="e.g. A beginner's guide to how heat pumps work" required></textarea>
 
-                <div class="examples">
+                <div class="examples" id="kb-examples">
                     <span class="examples-label">Knowledge base covers:</span>
                     <button type="button" class="chip" data-example="How heat pumps cut home energy bills">Renewable energy</button>
                     <button type="button" class="chip" data-example="What melatonin does and when it helps you sleep">Sleep</button>
