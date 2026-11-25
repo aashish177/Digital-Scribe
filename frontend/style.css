@@ -346,6 +346,9 @@ textarea:focus, input:focus, select:focus {
 .sources a:hover { color: var(--accent); border-color: var(--accent); }
 .sources .empty { list-style: none; margin-left: -20px; color: var(--muted); }
 .source-file { color: var(--ink); }
+.source-meta { color: var(--muted); font-size: .78rem; margin-top: 1px; }
+.retry { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; padding: 14px 16px;
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--accent-soft); }
 .source-quote { color: var(--muted); font-family: var(--serif); font-size: .82rem; margin-top: 2px; }
 
 .serp { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }

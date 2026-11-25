@@ -31,7 +31,9 @@
                     <span class="examples-label">Write from:</span>
                     <label class="seg"><input type="radio" name="source" value="builtin" checked> Built-in knowledge base</label>
                     <label class="seg"><input type="radio" name="source" value="documents"> My documents</label>
+                    <label class="seg hidden" id="web-option"><input type="radio" name="source" value="web"> Web</label>
                 </div>
+                <p id="web-note" class="privacy muted hidden">Your topic is sent to Tavily to search the web. Pages are read only for this article, and every claim links to its source.</p>
 
                 <div id="docs-panel" class="docs hidden">
                     <label id="drop-zone" class="drop" tabindex="0">
@@ -128,6 +130,11 @@
                 <button id="approve-btn" class="btn-primary">Approve and continue</button>
             </div>
 
+            <div id="web-retry" class="retry hidden">
+                <p class="muted">Nothing in this source covers the topic. The web might.</p>
+                <button type="button" id="web-retry-btn" class="btn-primary">Search the web instead</button>
+            </div>
+
             <details class="activity">
                 <summary>Activity log</summary>
                 <div id="logs" class="logs"></div>
@@ -186,7 +193,7 @@
         </section>
     </main>
 
-    <footer class="footer">Built with LangGraph · Sources from Wikipedia, CC BY-SA 4.0</footer>
+    <footer class="footer">Built with LangGraph · <span id="footer-credit">Sources from Wikipedia, CC BY-SA 4.0</span></footer>
 
     <script src="/static/main.js"></script>
 </body>

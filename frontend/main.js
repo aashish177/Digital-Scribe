@@ -220,17 +220,52 @@ async function removeDoc(d) {
     renderDocs();
 }
 
+const PLACEHOLDERS = {
+    builtin: "e.g. A beginner's guide to how heat pumps work",
+    documents: 'e.g. A customer-facing summary of what changed in the latest release',
+    web: 'e.g. What changed in electric car tax credits this year',
+};
+const CREDITS = {
+    builtin: 'Sources from Wikipedia, CC BY-SA 4.0',
+    documents: 'Sources from your documents',
+    web: 'Web search by Tavily · sources linked in each article',
+};
+
 function applySource() {
-    const useDocs = selectedSource() === 'documents';
-    $('docs-panel').classList.toggle('hidden', !useDocs);
-    $('kb-examples').classList.toggle('hidden', useDocs);
-    $('request').placeholder = useDocs
-        ? 'e.g. A customer-facing summary of what changed in the latest release'
-        : "e.g. A beginner's guide to how heat pumps work";
-    if (useDocs) loadDocs();
+    const source = selectedSource();
+    $('docs-panel').classList.toggle('hidden', source !== 'documents');
+    $('kb-examples').classList.toggle('hidden', source !== 'builtin');
+    $('web-note').classList.toggle('hidden', source !== 'web');
+    $('request').placeholder = PLACEHOLDERS[source];
+    $('footer-credit').textContent = CREDITS[source];
+    if (source === 'documents') loadDocs();
 }
 
 document.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', applySource));
+
+// Web search is optional on the server; show it only when it's set up.
+let webEnabled = false;
+fetch('/api/v1/config')
+    .then(res => (res.ok ? res.json() : {}))
+    .then(cfg => {
+        webEnabled = !!cfg.web_search;
+        $('web-option').classList.toggle('hidden', !webEnabled);
+    })
+    .catch(() => {});
+
+let lastSource = 'builtin';
+const NO_PASSAGES = 'No relevant passages';
+
+function offerWebRetry(error) {
+    const show = webEnabled && lastSource !== 'web' && String(error || '').startsWith(NO_PASSAGES);
+    $('web-retry').classList.toggle('hidden', !show);
+}
+
+$('web-retry-btn').addEventListener('click', () => {
+    document.querySelector('input[name="source"][value="web"]').checked = true;
+    applySource();
+    genForm.requestSubmit();
+});
 $('file-input').addEventListener('change', (e) => {
     addFiles(e.target.files);
     e.target.value = '';
@@ -597,6 +632,7 @@ function connectStream(requestId) {
                 progressTitle.textContent = 'Something went wrong';
                 log(`Error: ${data.error}`, 'error');
                 stopRunningSteps();
+                offerWebRetry(data.error);
                 submitBtn.disabled = false;
                 break;
         }
@@ -623,6 +659,7 @@ async function pollStatus(requestId) {
             setStatus('Failed', 'err');
             log(`Error: ${data.error}`, 'error');
             stopRunningSteps();
+            offerWebRetry(data.error);
         } else if (data.status === 'processing' || data.status === 'pending') {
             setTimeout(() => pollStatus(requestId), 3000);
         }
@@ -696,6 +733,12 @@ function renderTranslations(translations) {
     });
 }
 
+function formatDate(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 function renderSources(sources) {
     const list = $('sources-list');
     list.innerHTML = '';
@@ -717,12 +760,12 @@ function renderSources(sources) {
         }
         const a = document.createElement('a');
         a.textContent = s.title;
-        if (/^https?:\/\//.test(s.url)) {
-            a.href = s.url;
-            a.target = '_blank';
-            a.rel = 'noopener noreferrer';
-        }
+        a.href = s.url;
+        a.target = '_blank';
+        a.rel = s.site ? 'noopener noreferrer nofollow' : 'noopener noreferrer';
         li.appendChild(a);
+        const meta = [s.site, formatDate(s.published)].filter(Boolean).join(' · ');
+        if (meta) li.append(el('div', 'source-meta', meta));
         list.appendChild(li);
     });
 }
@@ -847,8 +890,10 @@ genForm.addEventListener('submit', async (e) => {
         ...(source === 'documents' ? { workspace_id: workspaceId } : {}),
     };
     if (!payload.request) return;
+    lastSource = source;
 
     submitBtn.disabled = true;
+    $('web-retry').classList.add('hidden');
     resultSection.classList.add('hidden');
     hitlPanel.classList.add('hidden');
     resetSteps();
