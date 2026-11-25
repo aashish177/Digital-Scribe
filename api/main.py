@@ -2,10 +2,13 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional, Dict, Any, List
 from sse_starlette.sse import EventSourceResponse
 from graph.workflow import create_content_workflow, initialize_state
+from api.summaries import AGENT_ORDER, summarize_node, summarize_run, run_totals
+from config import Config
+import json
 import logging
 import uuid
 import sys
@@ -23,13 +26,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS setup
+# The UI is served from this same app, so only local origins need CORS.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=Config.ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 # Setup initial configurations
@@ -43,7 +46,19 @@ workflow_app_hitl = create_content_workflow(enable_hitl=True)
 
 # In-memory store
 jobs: Dict[str, Dict[str, Any]] = {}
-batches: Dict[str, Dict[str, Any]] = {}
+
+
+def add_job(request_id: str, job: Dict[str, Any]) -> None:
+    """Store a job, dropping the oldest finished ones past the cap."""
+    jobs[request_id] = job
+    if len(jobs) > Config.MAX_JOBS_IN_MEMORY:
+        finished = [rid for rid, j in jobs.items() if j["status"] in ("completed", "failed")]
+        for rid in finished[: len(jobs) - Config.MAX_JOBS_IN_MEMORY]:
+            jobs.pop(rid, None)
+
+
+def webhook_allowed(url: Optional[HttpUrl]) -> bool:
+    return url is not None and url.scheme == "https" and (url.host or "").lower() in Config.WEBHOOK_ALLOWED_HOSTS
 
 class NotificationManager:
     def __init__(self):
@@ -68,18 +83,14 @@ class NotificationManager:
 notifications = NotificationManager()
 
 class GenerationRequest(BaseModel):
-    request: str
-    word_count: Optional[int] = 800
-    tone: Optional[str] = "professional"
+    request: str = Field(min_length=3, max_length=1000)
+    word_count: Optional[int] = Field(default=800, ge=50, le=2000)
+    tone: Optional[str] = Field(default="professional", max_length=30)
     webhook_url: Optional[HttpUrl] = None
     require_approval: Optional[bool] = False
-    languages: Optional[List[str]] = []
+    languages: Optional[List[str]] = Field(default_factory=list, max_length=3)
     generate_image: Optional[bool] = True
     generate_social_posts: Optional[bool] = True
-
-class BatchGenerationRequest(BaseModel):
-    requests: List[GenerationRequest]
-    priority: Optional[str] = "normal"
 
 async def send_webhook(url: str, payload: dict):
     try:
@@ -110,7 +121,8 @@ async def run_pipeline(request_id: str, content_request: str, settings: dict, we
                 await notifications.broadcast(request_id, {
                     "event": "node_complete", 
                     "node": node_name,
-                    "status": "processing"
+                    "status": "processing",
+                    **({"summary": summarize_node(node_name, node_output)} if node_name in AGENT_ORDER else {}),
                 })
 
         # Always use get_state() for the full accumulated pipeline state
@@ -129,6 +141,8 @@ async def run_pipeline(request_id: str, content_request: str, settings: dict, we
 
         # Completed (HITL or non-HITL)
         final_state = snapshot.values
+        if not final_state.get("final_content"):
+            raise RuntimeError("; ".join(final_state.get("errors") or []) or "Pipeline finished without content")
             
         jobs[request_id]["status"] = "completed"
         jobs[request_id]["result"] = final_state
@@ -149,15 +163,17 @@ async def run_pipeline(request_id: str, content_request: str, settings: dict, we
 
 @app.post("/api/v1/generate")
 async def generate_content(req: GenerationRequest, background_tasks: BackgroundTasks):
+    if req.webhook_url and not webhook_allowed(req.webhook_url):
+        raise HTTPException(status_code=400, detail="webhook_url host is not allowed")
     request_id = str(uuid.uuid4())
     settings = {
         "word_count": req.word_count,
         "tone": req.tone,
-        "languages": req.languages,
+        "languages": [lang.strip()[:30] for lang in req.languages or [] if lang.strip()],
         "generate_image": req.generate_image,
         "generate_social_posts": req.generate_social_posts
     }
-    jobs[request_id] = {"status": "pending", "request": req.request, "settings": settings, "result": None, "error": None}
+    add_job(request_id, {"status": "pending", "request": req.request, "settings": settings, "result": None, "error": None})
     background_tasks.add_task(run_pipeline, request_id, req.request, settings, req.webhook_url, req.require_approval)
     return {"request_id": request_id, "status": "pending"}
 
@@ -168,7 +184,7 @@ async def stream_status(request_id: str, just_replay: bool = False):
 
     async def event_generator():
         # Yield a 'connected' event immediately so clients (and tests) see activity
-        yield {"data": {"event": "connected"}}
+        yield {"data": json.dumps({"event": "connected"}, default=str)}
         
         queue = notifications.get_queue(request_id)
         try:
@@ -178,12 +194,12 @@ async def stream_status(request_id: str, just_replay: bool = False):
                 status = current_job.get("status")
                 if status == "awaiting_approval":
                     brief = (current_job.get("result") or {}).get("brief")
-                    yield {"data": {"event": "awaiting_approval", "brief": brief}}
+                    yield {"data": json.dumps({"event": "awaiting_approval", "brief": brief}, default=str)}
                 elif status == "completed":
-                    yield {"data": {"event": "completed"}}
+                    yield {"data": json.dumps({"event": "completed"}, default=str)}
                     return
                 elif status == "failed":
-                    yield {"data": {"event": "failed", "error": current_job.get("error")}}
+                    yield {"data": json.dumps({"event": "failed", "error": current_job.get("error")}, default=str)}
                     return
             
             if just_replay:
@@ -191,11 +207,11 @@ async def stream_status(request_id: str, just_replay: bool = False):
 
             while True:
                 message = await asyncio.wait_for(queue.get(), timeout=120.0)
-                yield {"data": message}
+                yield {"data": json.dumps(message, default=str)}
                 if message.get("event") in ["completed", "failed"]:
                     break
         except asyncio.TimeoutError:
-            yield {"data": {"event": "failed", "error": "Stream timed out"}}
+            yield {"data": json.dumps({"event": "failed", "error": "Stream timed out"}, default=str)}
         finally:
             notifications.remove_queues(request_id)
     return EventSourceResponse(event_generator())
@@ -216,14 +232,22 @@ async def approve_content(request_id: str, background_tasks: BackgroundTasks):
             async for event in workflow_app_hitl.astream(None, config=config):
                 for node_name, node_output in event.items():
                     logger.info(f"[{request_id[:8]}] Resume: Node '{node_name}' completed")
-                    await notifications.broadcast(request_id, {"event": "node_complete", "node": node_name, "status": "processing"})
+                    await notifications.broadcast(request_id, {
+                        "event": "node_complete",
+                        "node": node_name,
+                        "status": "processing",
+                        **({"summary": summarize_node(node_name, node_output)} if node_name in AGENT_ORDER else {}),
+                    })
             snapshot = workflow_app_hitl.get_state(config)
+            if not snapshot.values.get("final_content"):
+                raise RuntimeError("; ".join(snapshot.values.get("errors") or []) or "Pipeline finished without content")
             jobs[request_id]["status"] = "completed"
             jobs[request_id]["result"] = snapshot.values
             await notifications.broadcast(request_id, {"event": "completed"})
         except Exception as e:
             logger.error(f"Resume failed for {request_id}: {str(e)}", exc_info=True)
             jobs[request_id]["status"] = "failed"
+            jobs[request_id]["error"] = str(e)
             await notifications.broadcast(request_id, {"event": "failed", "error": str(e)})
             
     background_tasks.add_task(resume_pipeline)
@@ -247,6 +271,13 @@ async def get_content(request_id: str):
     if job["status"] not in ["completed", "awaiting_approval"]:
         return {"request_id": request_id, "status": job["status"], "message": "Content not ready."}
     result = job["result"]
+    sources = {}
+    for doc in result.get("retrieved_documents") or []:
+        meta = doc.get("metadata") or {}
+        url = meta.get("source") or doc.get("source")
+        if url and url not in sources:
+            sources[url] = {"title": meta.get("title") or url, "url": url}
+    source_list = result.get("sources") or list(sources.values())
     return {
         "request_id": request_id,
         "final_content": result.get("final_content"),
@@ -254,7 +285,12 @@ async def get_content(request_id: str):
         "brief": result.get("brief"),
         "translated_content": result.get("translated_content"),
         "social_media_posts": result.get("social_media_posts"),
-        "generated_images": result.get("generated_images")
+        "generated_images": result.get("generated_images"),
+        "sources": source_list,
+        "execution_times": result.get("execution_times") or {},
+        "edit_notes": result.get("edit_notes"),
+        "agents": summarize_run(result),
+        "totals": run_totals(result),
     }
 
 if os.path.exists("frontend"):

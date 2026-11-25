@@ -16,8 +16,10 @@ class Config:
     OUTPUT_DIR = BASE_DIR / "outputs"
 
     # Model Settings
-    MODEL_NAME = "gpt-4o"  # OpenAI GPT-4 Turbo
+    MODEL_NAME = "gpt-4o"
     EMBEDDING_MODEL = "text-embedding-3-small"
+    # USD per 1M tokens (input, output), used for cost estimates in the UI.
+    MODEL_PRICES = {"gpt-4o": (2.50, 10.00)}
 
     # Agent Specifics (Temperatures)
     PLANNER_TEMP = 0.2
@@ -40,6 +42,14 @@ class Config:
     MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
     RETRY_BASE_DELAY = float(os.getenv("RETRY_BASE_DELAY", "1.0"))
     RETRY_MAX_DELAY = float(os.getenv("RETRY_MAX_DELAY", "60.0"))
+    REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "120"))
+    MAX_WRITER_ATTEMPTS = 2
+
+    # API limits
+    MAX_JOBS_IN_MEMORY = 200
+    ALLOWED_ORIGINS = [o for o in os.getenv("ALLOWED_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000").split(",") if o]
+    # Webhooks are off unless a host allowlist is configured.
+    WEBHOOK_ALLOWED_HOSTS = {h.strip().lower() for h in os.getenv("WEBHOOK_ALLOWED_HOSTS", "").split(",") if h.strip()}
 
     @classmethod
     def validate(cls):

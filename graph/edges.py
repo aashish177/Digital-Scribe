@@ -1,36 +1,37 @@
+from langgraph.graph import END
+from config import Config
 from graph.state import ContentState
 
-def should_retry_writing(state: ContentState) -> str:
-    """Check if draft needs rewriting due to insufficient word count."""
-    draft = state.get("draft_content", "")
-    brief = state.get("brief", {})
-    
-    # Simple check for empty draft
-    if not draft:
-        return "rewrite"
-    
-    # Use the correct field name: word_count_target
-    target_words = brief.get("word_count_target", 800)
-    actual_words = len(draft.split())
-    
-    # Retry if draft is less than 60% of the target word count
-    if actual_words < target_words * 0.6:
-        return "rewrite"
-    
-    return "proceed"
+FAN_OUT = ["translator", "social_media", "image_gen"]
 
-def should_retry_editing(state: ContentState) -> str:
-    """Check editing quality"""
-    confidence = state.get("confidence_scores", {}).get("editing", 1.0)
-    
-    if confidence < 0.7:
-        return "re_edit"
-    
-    return "proceed"
 
 def check_errors(state: ContentState) -> str:
-    """Check for fatal errors"""
+    """Stop the pipeline once a core step has failed."""
+    return "error" if state.get("errors") else "continue"
+
+
+def should_retry_writing(state: ContentState) -> str:
+    """Retry a short or failed draft, up to MAX_WRITER_ATTEMPTS in total."""
+    draft = state.get("draft_content") or ""
+    attempts = state.get("writer_attempts") or 0
+    brief = state.get("brief") or {}
+
     if state.get("errors"):
         return "error"
-    
-    return "continue"
+
+    if attempts >= Config.MAX_WRITER_ATTEMPTS:
+        return "proceed" if draft else "error"
+
+    if not draft:
+        return "rewrite"
+
+    target_words = brief.get("word_count_target", 800)
+    if len(draft.split()) < target_words * 0.6:
+        return "rewrite"
+
+    return "proceed"
+
+
+def after_seo(state: ContentState):
+    """Fan out to the optional agents, or stop if SEO failed."""
+    return END if state.get("errors") else FAN_OUT

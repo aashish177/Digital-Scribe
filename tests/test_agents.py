@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 from agents.planner import PlannerAgent
 from agents.researcher import ResearchAgent
 from agents.writer import WriterAgent
-from agents.editor import EditorAgent
-from agents.seo import SEOAgent
+from agents.editor import EditorAgent, EditResult
+from agents.seo import SEOAgent, SEOMetadata
 
 @pytest.fixture
 def mock_chain(mocker):
@@ -54,7 +54,7 @@ def test_writer_agent(mock_chain):
     assert "drafted content" in result
 
 def test_editor_agent(mock_chain, mock_chroma):
-    mock_chain.invoke.return_value = "This is the newly edited content.\n---DIVIDER---\nImproved clarity."
+    mock_chain.invoke.return_value = EditResult(content="This is the newly edited content.", changes=["Improved clarity."])
     
     # Mock chroma query for style guide
     mock_style_doc = MagicMock()
@@ -72,16 +72,13 @@ def test_editor_agent(mock_chain, mock_chroma):
     assert "clarity" in notes
 
 def test_seo_agent(mock_chain, mock_chroma):
-    mock_chain.invoke.return_value = {
-        "optimized_content": "Optimized Content text.",
-        "metadata": {
-            "title": "SEO Title",
-            "meta_description": "SEO Description",
-            "keywords": ["a", "b"],
-            "url_slug": "seo-slug",
-            "confidence": 0.95
-        }
-    }
+    mock_chain.invoke.return_value = SEOMetadata(
+        title="SEO Title",
+        meta_description="SEO Description",
+        keywords_used=["a", "b"],
+        url_slug="seo-slug",
+        confidence=0.95,
+    )
     
     # Mock chroma query for competitor data
     mock_seo_doc = MagicMock()
@@ -95,7 +92,7 @@ def test_seo_agent(mock_chain, mock_chroma):
     final_content, metadata = agent.optimize(content, brief)
     
     assert mock_chain.invoke.called
-    assert "Optimized Content" in final_content
+    assert final_content == content
     assert metadata["title"] == "SEO Title"
     assert metadata["confidence"] == 0.95
 

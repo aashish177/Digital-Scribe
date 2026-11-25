@@ -1,4 +1,5 @@
 import os
+import threading
 from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.config import Settings
@@ -10,6 +11,34 @@ from langchain_community.document_compressors.flashrank_rerank import FlashrankR
 from langchain_classic.embeddings import CacheBackedEmbeddings
 from langchain_classic.storage import LocalFileStore
 from config import Config
+
+# Clients, BM25 indexes and the reranker are expensive to build, so every
+# ChromaDBManager in the process shares one set per database path.
+_shared: Dict[str, Dict[str, Any]] = {}
+_lock = threading.Lock()
+RERANK_POOL = 20
+
+
+def _resources(path: str) -> Dict[str, Any]:
+    with _lock:
+        if path not in _shared:
+            os.makedirs(path, exist_ok=True)
+            cache_dir = os.path.join(path, "embeddings_cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            embeddings = CacheBackedEmbeddings.from_bytes_store(
+                OpenAIEmbeddings(model=Config.EMBEDDING_MODEL, api_key=Config.OPENAI_API_KEY),
+                LocalFileStore(cache_dir),
+                namespace=Config.EMBEDDING_MODEL,
+            )
+            _shared[path] = {
+                "embeddings": embeddings,
+                "client": chromadb.PersistentClient(path=str(path)),
+                "stores": {},
+                "bm25": {},
+                "reranker": None,
+            }
+        return _shared[path]
+
 
 class ChromaDBManager:
     """
@@ -32,39 +61,12 @@ class ChromaDBManager:
             persistent_path: Path to store the vector database. Defaults to config value.
         """
         self.persist_path = persistent_path or Config.VECTOR_DB_PATH
-        
-        # Ensure directory exists
-        os.makedirs(self.persist_path, exist_ok=True)
-        
-        # Initialize embedding function with persistent caching
-        # This prevents redundant calls to OpenAI during testing and development
-        underlying_embeddings = OpenAIEmbeddings(
-            model=Config.EMBEDDING_MODEL,
-            api_key=Config.OPENAI_API_KEY
-        )
-        
-        # Setup local file store for embeddings cache
-        cache_dir = os.path.join(self.persist_path, "embeddings_cache")
-        os.makedirs(cache_dir, exist_ok=True)
-        store = LocalFileStore(cache_dir)
-        
-        self.embedding_function = CacheBackedEmbeddings.from_bytes_store(
-            underlying_embeddings,
-            store,
-            namespace=Config.EMBEDDING_MODEL
-        )
-        
-        # Initialize client
-        self.client = chromadb.PersistentClient(path=str(self.persist_path))
-        
-        # Initialize stores lazy-loaded or upfront
-        self.vector_stores = {}
-        
-        # Cache for BM25 Retrievers per collection
-        self._bm25_retrievers = {}
-        
-        # Lazy-loaded reranker
-        self._reranker = None
+        shared = _resources(self.persist_path)
+        self.embedding_function = shared["embeddings"]
+        self.client = shared["client"]
+        self.vector_stores = shared["stores"]
+        self._bm25_retrievers = shared["bm25"]
+        self._shared = shared
         
     def get_vector_store(self, collection_name: str) -> Chroma:
         """
@@ -76,11 +78,13 @@ class ChromaDBManager:
         real_collection_name = self.COLLECTIONS[collection_name]
         
         if collection_name not in self.vector_stores:
-            self.vector_stores[collection_name] = Chroma(
-                client=self.client,
-                collection_name=real_collection_name,
-                embedding_function=self.embedding_function,
-            )
+            with _lock:
+                if collection_name not in self.vector_stores:
+                    self.vector_stores[collection_name] = Chroma(
+                        client=self.client,
+                        collection_name=real_collection_name,
+                        embedding_function=self.embedding_function,
+                    )
             
         return self.vector_stores[collection_name]
 
@@ -89,29 +93,30 @@ class ChromaDBManager:
         Add documents to a specific collection.
         """
         store = self.get_vector_store(collection_name)
-        return store.add_documents(documents)
+        ids = store.add_documents(documents)
+        self._bm25_retrievers.pop(collection_name, None)
+        return ids
 
     def get_bm25_retriever(self, collection_name: str) -> Optional[BM25Retriever]:
         """Get or create the BM25Retriever for a specific collection."""
         if collection_name not in self._bm25_retrievers:
             store = self.get_vector_store(collection_name)
-            # Retrieve all documents to build the BM25 index
             all_docs = store.get()
-            
             docs, metadatas = all_docs.get("documents", []), all_docs.get("metadatas", [])
-            
             if not docs:
                 return None
-                
             langchain_docs = [Document(page_content=doc, metadata=meta or {}) for doc, meta in zip(docs, metadatas)]
-            self._bm25_retrievers[collection_name] = BM25Retriever.from_documents(langchain_docs)
+            retriever = BM25Retriever.from_documents(langchain_docs, k=RERANK_POOL // 2)
+            with _lock:
+                self._bm25_retrievers.setdefault(collection_name, retriever)
             
         return self._bm25_retrievers[collection_name]
         
     def get_reranker(self):
-        if not self._reranker:
-            self._reranker = FlashrankRerank(top_n=4)
-        return self._reranker
+        with _lock:
+            if not self._shared["reranker"]:
+                self._shared["reranker"] = FlashrankRerank(top_n=RERANK_POOL)
+        return self._shared["reranker"]
 
     def query(self, collection_name: str, query_text: str, k: int = 4, filter: Optional[Dict] = None) -> List[Document]:
         """
@@ -126,7 +131,6 @@ class ChromaDBManager:
         # Sparse retrieval (BM25 Keyword Search)
         sparse_retriever = self.get_bm25_retriever(collection_name)
         if sparse_retriever:
-            sparse_retriever.k = k * 2
             sparse_docs = sparse_retriever.invoke(query_text)
             for doc in sparse_docs:
                 if doc.page_content not in all_docs:
@@ -139,6 +143,10 @@ class ChromaDBManager:
             
         reranker = self.get_reranker()
         reranked_docs = reranker.compress_documents(combined_docs, query_text)
+        # FlashRank returns numpy floats, which the graph checkpointer cannot serialize.
+        for doc in reranked_docs:
+            if "relevance_score" in doc.metadata:
+                doc.metadata["relevance_score"] = float(doc.metadata["relevance_score"])
         
         return reranked_docs[:k]
         

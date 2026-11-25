@@ -11,7 +11,7 @@ from graph.nodes import (
     social_media_node,
     image_gen_node
 )
-from graph.edges import should_retry_writing, check_errors
+from graph.edges import FAN_OUT, after_seo, check_errors, should_retry_writing
 from utils.logger import generate_request_id
 from datetime import datetime
 import logging
@@ -45,27 +45,18 @@ def create_content_workflow(enable_hitl: bool = False, checkpointer = None):
     # Set entry point
     workflow.set_entry_point("planner")
     
-    # Add edges (linear flow with conditionals)
-    workflow.add_edge("planner", "researcher")
-    workflow.add_edge("researcher", "writer")
-    
-    # Conditional edge: check if writing needs retry
+    # Core steps stop the run on error; the last three fan out in parallel.
+    workflow.add_conditional_edges("planner", check_errors, {"continue": "researcher", "error": END})
+    workflow.add_conditional_edges("researcher", check_errors, {"continue": "writer", "error": END})
     workflow.add_conditional_edges(
         "writer",
         should_retry_writing,
-        {
-            "rewrite": "writer",  # Loop back
-            "proceed": "editor"
-        }
+        {"rewrite": "writer", "proceed": "editor", "error": END}
     )
-    
-    # TODO: Add error handling edges using check_errors if needed
-    
-    workflow.add_edge("editor", "seo")
-    workflow.add_edge("seo", "translator")
-    workflow.add_edge("translator", "social_media")
-    workflow.add_edge("social_media", "image_gen")
-    workflow.add_edge("image_gen", END)
+    workflow.add_conditional_edges("editor", check_errors, {"continue": "seo", "error": END})
+    workflow.add_conditional_edges("seo", after_seo, FAN_OUT + [END])
+    for node in FAN_OUT:
+        workflow.add_edge(node, END)
     
     # Setup Human-in-the-loop if enabled
     kwargs = {}
@@ -118,7 +109,9 @@ def initialize_state(content_request: str, settings: dict = None) -> ContentStat
         "research_queries": None,
         "research_findings": None,
         "retrieved_documents": [],
+        "sources": [],
         "draft_content": None,
+        "writer_attempts": 0,
         "edited_content": None,
         "edit_notes": None,
         "final_content": None,
@@ -135,5 +128,6 @@ def initialize_state(content_request: str, settings: dict = None) -> ContentStat
         "request_id": request_id,
         "started_at": datetime.utcnow().isoformat() + "Z",
         "execution_times": {},
-        "token_usage": {}
+        "token_usage": {},
+        "usage": {}
     }

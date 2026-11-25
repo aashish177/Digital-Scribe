@@ -4,162 +4,174 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Digital Scribe | Dashboard</title>
+    <title>Digital Scribe</title>
+    <meta name="description" content="A multi-agent writing pipeline that plans, researches, writes, edits and optimizes articles with cited sources.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 </head>
 
-<body class="dark">
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="logo">
-                <i data-lucide="zap"></i>
-                <span>ACF 1.0</span>
-            </div>
-            <nav>
-                <a href="#" class="active"><i data-lucide="layout-dashboard"></i> Dashboard</a>
-                <a href="#"><i data-lucide="file-text"></i> Library</a>
-                <a href="#"><i data-lucide="bar-chart-2"></i> Analytics</a>
-                <a href="#"><i data-lucide="settings"></i> Settings</a>
-            </nav>
-            <div class="user-profile">
-                <div class="avatar">AM</div>
-                <div class="info">
-                    <span class="name">Aashish M.</span>
-                    <span class="role">Admin</span>
+<body>
+    <header class="topbar">
+        <div class="wordmark">Digital <span>Scribe</span></div>
+        <p class="tagline">8 agents · hybrid RAG · cited sources</p>
+    </header>
+
+    <main class="page">
+        <!-- Composer -->
+        <section id="request-section" class="composer">
+            <h1>What should we write about?</h1>
+            <p class="lede">Agents plan the piece, research a curated knowledge base, write, edit and tune it for search.</p>
+
+            <form id="gen-form">
+                <textarea id="request" rows="3" placeholder="e.g. A beginner's guide to how heat pumps work" required></textarea>
+
+                <div class="examples">
+                    <span class="examples-label">Knowledge base covers:</span>
+                    <button type="button" class="chip" data-example="How heat pumps cut home energy bills">Renewable energy</button>
+                    <button type="button" class="chip" data-example="What melatonin does and when it helps you sleep">Sleep</button>
+                    <button type="button" class="chip" data-example="What the James Webb Space Telescope has discovered">Space</button>
+                    <button type="button" class="chip" data-example="Green tea vs coffee: caffeine, theanine and focus">Tea &amp; coffee</button>
+                </div>
+
+                <div class="options">
+                    <label class="field">
+                        <span>Length</span>
+                        <select id="word_count">
+                            <option value="500">Short · 500 words</option>
+                            <option value="800" selected>Medium · 800 words</option>
+                            <option value="1200">Long · 1,200 words</option>
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span>Tone</span>
+                        <select id="tone">
+                            <option value="professional">Professional</option>
+                            <option value="friendly">Friendly</option>
+                            <option value="casual">Casual</option>
+                            <option value="technical">Technical</option>
+                        </select>
+                    </label>
+                </div>
+
+                <details class="more">
+                    <summary>More options</summary>
+                    <div class="more-body">
+                        <label class="toggle"><input type="checkbox" id="gen_social" checked> Social media posts</label>
+                        <label class="toggle"><input type="checkbox" id="gen_image" checked> Cover image idea</label>
+                        <label class="toggle"><input type="checkbox" id="require_approval"> Review the brief before research</label>
+                        <label class="field">
+                            <span>Translate into (comma separated)</span>
+                            <input type="text" id="languages" placeholder="Spanish, French">
+                        </label>
+                    </div>
+                </details>
+
+                <button type="submit" class="btn-primary" id="submit-btn">Write the article</button>
+            </form>
+        </section>
+
+        <!-- Progress -->
+        <section id="status-section" class="progress hidden" aria-live="polite">
+            <div class="progress-head">
+                <div>
+                    <h2 id="progress-title">Writing your article</h2>
+                    <p id="progress-topic" class="topic"></p>
+                </div>
+                <div class="head-right">
+                    <div class="view-toggle" role="group" aria-label="Progress view">
+                        <button type="button" data-view="simple" class="on">Simple</button>
+                        <button type="button" data-view="agents">Agents</button>
+                    </div>
+                    <span id="current-status" class="status">Starting</span>
                 </div>
             </div>
-        </aside>
+            <ol class="steps">
+                <li data-step="planner">Plan</li>
+                <li data-step="researcher">Research</li>
+                <li data-step="writer">Write</li>
+                <li data-step="editor">Edit</li>
+                <li data-step="seo">SEO</li>
+                <li data-step="translator">Translate</li>
+                <li data-step="social_media">Social</li>
+                <li data-step="image_gen">Image</li>
+            </ol>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <header>
-                <h1>Content Generation Dashboard</h1>
-                <div class="actions">
-                    <button id="new-request-btn" class="btn-primary">
-                        <i data-lucide="plus"></i> New Article
-                    </button>
-                </div>
-            </header>
-
-            <div class="dashboard-grid">
-                <!-- Generation Form (Hidden by default or Modal) -->
-                <section id="request-section" class="card glass">
-                    <div class="card-header">
-                        <h2>Create New Content</h2>
-                        <button class="close-btn" id="hide-request-btn"><i data-lucide="x"></i></button>
-                    </div>
-                    <form id="gen-form">
-                        <div class="form-group">
-                            <label for="request">Topic or Prompt</label>
-                            <textarea id="request" placeholder="What should we write about today?" required></textarea>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="word_count">Word Count</label>
-                                <input type="number" id="word_count" value="800">
-                            </div>
-                            <div class="form-group">
-                                <label for="tone">Tone</label>
-                                <select id="tone">
-                                    <option value="professional">Professional</option>
-                                    <option value="casual">Casual</option>
-                                    <option value="friendly">Friendly</option>
-                                    <option value="technical">Technical</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>Advanced Modalities</label>
-                            <div class="checkbox-group">
-                                <label><input type="checkbox" id="gen_image" checked> Generate DALL-E Image</label>
-                                <label><input type="checkbox" id="gen_social" checked> Create Social Posts</label>
-                                <label><input type="checkbox" id="require_approval" checked> Require Brief
-                                    Approval</label>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="languages">Target Languages (comma separated)</label>
-                            <input type="text" id="languages" placeholder="Spanish, French, German">
-                        </div>
-                        <button type="submit" class="btn-submit">Launch Pipeline</button>
-                    </form>
-                </section>
-
-                <!-- Status & Progress -->
-                <section id="status-section" class="card glass hidden">
-                    <div class="card-header">
-                        <h2>Pipeline Progress</h2>
-                        <span id="current-status" class="badge">Idle</span>
-                    </div>
-                    <div class="pipeline-visualizer">
-                        <div class="step" data-step="planner">
-                            <div class="step-icon"><i data-lucide="map"></i></div>
-                            <span class="step-label">Planner</span>
-                        </div>
-                        <div class="line"></div>
-                        <div class="step" data-step="researcher">
-                            <div class="step-icon"><i data-lucide="search"></i></div>
-                            <span class="step-label">Researcher</span>
-                        </div>
-                        <div class="line"></div>
-                        <div class="step" data-step="writer">
-                            <div class="step-icon"><i data-lucide="pen-tool"></i></div>
-                            <span class="step-label">Writer</span>
-                        </div>
-                        <div class="line"></div>
-                        <div class="step" data-step="editor">
-                            <div class="step-icon"><i data-lucide="check-square"></i></div>
-                            <span class="step-label">Editor</span>
-                        </div>
-                        <div class="line"></div>
-                        <div class="step" data-step="seo">
-                            <div class="step-icon"><i data-lucide="trending-up"></i></div>
-                            <span class="step-label">SEO</span>
-                        </div>
-                    </div>
-                    <div id="hitl-panel" class="hitl-panel hidden">
-                        <div class="hitl-header">
-                            <i data-lucide="alert-circle"></i>
-                            <span>Brief Awaiting Approval</span>
-                        </div>
-                        <div id="brief-preview" class="brief-preview"></div>
-                        <button id="approve-btn" class="btn-approve">Approve & Continue Research</button>
-                    </div>
-                    <div class="logs-window">
-                        <div id="logs" class="logs"></div>
-                    </div>
-                </section>
-
-                <!-- Final View -->
-                <section id="result-section" class="card glass hidden">
-                    <div class="card-header">
-                        <h2>Generated Content</h2>
-                        <div class="result-actions">
-                            <button id="copy-btn"><i data-lucide="copy"></i></button>
-                            <button id="download-btn"><i data-lucide="download"></i></button>
-                        </div>
-                    </div>
-                    <div class="tabs">
-                        <button class="tab-btn active" data-tab="article">Article</button>
-                        <button class="tab-btn" data-tab="social">Social Media</button>
-                        <button class="tab-btn" data-tab="images">Images</button>
-                        <button class="tab-btn" data-tab="translations">Translations</button>
-                    </div>
-                    <div class="tab-content">
-                        <div id="article-view" class="tab-pane active"></div>
-                        <div id="social-view" class="tab-pane"></div>
-                        <div id="images-view" class="tab-pane"></div>
-                        <div id="translations-view" class="tab-pane"></div>
-                    </div>
-                </section>
+            <div id="agent-console" class="console hidden">
+                <ol id="trace" class="trace"></ol>
+                <div id="agent-detail" class="detail"></div>
             </div>
-        </main>
-    </div>
+
+            <div id="hitl-panel" class="approval hidden">
+                <h3>Review the brief</h3>
+                <p class="muted">Research starts once you approve.</p>
+                <div id="brief-preview" class="brief"></div>
+                <button id="approve-btn" class="btn-primary">Approve and continue</button>
+            </div>
+
+            <details class="activity">
+                <summary>Activity log</summary>
+                <div id="logs" class="logs"></div>
+            </details>
+        </section>
+
+        <!-- Result -->
+        <section id="result-section" class="result hidden">
+            <div class="result-bar">
+                <div class="tabs" role="tablist">
+                    <button class="tab-btn active" data-tab="article" role="tab">Article</button>
+                    <button class="tab-btn hidden" data-tab="social" role="tab">Social posts</button>
+                    <button class="tab-btn hidden" data-tab="translations" role="tab">Translations</button>
+                </div>
+                <div class="result-actions">
+                    <button id="copy-btn" class="btn-ghost">Copy Markdown</button>
+                    <button id="download-btn" class="btn-ghost">Download .md</button>
+                    <button id="new-request-btn" class="btn-ghost">New article</button>
+                </div>
+            </div>
+
+            <div class="result-grid">
+                <div class="tab-content">
+                    <article id="article-view" class="tab-pane prose active"></article>
+                    <div id="social-view" class="tab-pane"></div>
+                    <div id="translations-view" class="tab-pane prose"></div>
+                </div>
+
+                <aside class="side">
+                    <div class="side-block">
+                        <h3>Sources</h3>
+                        <ol id="sources-list" class="sources"></ol>
+                    </div>
+                    <div class="side-block hidden" id="seo-block">
+                        <h3>Search preview</h3>
+                        <div class="serp">
+                            <div id="seo-title" class="serp-title"></div>
+                            <div id="seo-slug" class="serp-url"></div>
+                            <div id="seo-desc" class="serp-desc"></div>
+                        </div>
+                    </div>
+                    <div class="side-block hidden" id="timing-block">
+                        <h3>Time per agent</h3>
+                        <div id="timings" class="timings"></div>
+                    </div>
+                    <div class="side-block hidden" id="image-block">
+                        <h3>Cover image idea</h3>
+                        <p id="image-prompt" class="muted"></p>
+                    </div>
+                    <details class="side-block hidden" id="notes-block">
+                        <summary>Editor notes</summary>
+                        <div id="edit-notes" class="notes"></div>
+                    </details>
+                </aside>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">Built with LangGraph · Sources from Wikipedia, CC BY-SA 4.0</footer>
+
     <script src="/static/main.js"></script>
 </body>
 

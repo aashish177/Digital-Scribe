@@ -1,84 +1,71 @@
-from typing import Tuple, Dict
+from typing import Dict, List, Tuple
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from pydantic import BaseModel, Field
 from agents.base import BaseAgent
 from config import Config
 from vector_stores.chroma import ChromaDBManager
 
+
+class EditResult(BaseModel):
+    content: str = Field(description="The full polished article in Markdown")
+    changes: List[str] = Field(description="Short bullet points describing the changes made")
+
+
 class EditorAgent(BaseAgent):
     def __init__(self):
         super().__init__(name="Editor", temperature=Config.EDITOR_TEMP)
-        
+
         self.db = ChromaDBManager()
-        self.parser = StrOutputParser()
-        
+
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert Content Editor. Your goal is to refine content to perfection.
-            
+
             Inputs:
             1. Draft Content
             2. Content Brief (requirements, including target word count)
             3. Style Guide (brand rules)
-            
+
             Instructions:
             - Check against the Style Guide (voice, formatting).
-            - Ensure all requirements in the Brief are met, including the target word count.
+            - Ensure all requirements in the Brief are met.
             - Fix grammar, flow, and clarity issues.
-            - Do NOT change the core facts or meaning.
-            - PRESERVE WORD COUNT: Do not remove significant content. The article should remain close to the target word count specified in the brief.
-            - If a section is thin or underdeveloped, note it in your changes summary but do NOT cut other sections to compensate.
-            - Only remove content that is genuinely redundant or factually wrong.
-            
-            Output Format:
-            Provide two sections separated by '---DIVIDER---':
-            1. The Polished Content (Markdown)
-            2. A summary of Changes Made (Bullet points)
+            - Do NOT change the core facts or meaning, and do NOT add new facts or figures.
+            - Keep every [n] citation attached to the claim it supports.
+            - Keep the article close to its current length. Only remove content that is genuinely redundant.
+            - If a section is thin or underdeveloped, note it in your changes instead of inventing material.
             """),
             ("user", """
             Brief:
             {brief}
-            
+
             Style Guide:
             {style_guide}
-            
+
             Draft Content:
             {draft}
             """)
         ])
-        
-        self.chain = self.prompt | self.llm | self.parser
+
+        self.chain = self.prompt | self.llm.with_structured_output(EditResult)
 
     def edit(self, draft: str, brief: Dict) -> Tuple[str, str]:
         """
         Edits the draft content.
-        
+
         Returns:
             Tuple containing:
             1. Edited content
             2. Notes on changes made
         """
-        # Retrieve Style Guide info
-        # In a real scenario, we might query based on specific sections needed
-        # For now, retrieve general voice/formatting guidelines
         style_docs = self.db.query("style", "brand voice formatting", k=2)
         style_guide_text = "\n\n".join([d.page_content for d in style_docs])
-        
-        input_data = {
+
+        result = self.invoke({
             "draft": draft,
             "brief": str(brief),
-            "style_guide": style_guide_text
-        }
-        
-        result_text = self.invoke(input_data)
-        
-        # Parse logic to separate content from notes
-        if "---DIVIDER---" in result_text:
-            parts = result_text.split("---DIVIDER---")
-            edited_content = parts[0].strip()
-            notes = parts[1].strip()
-        else:
-            # Fallback if model forgets format
-            edited_content = result_text
-            notes = "Editor provided no specific notes."
-            
-        return edited_content, notes
+            "style_guide": style_guide_text,
+        })
+
+        content = (result.content or "").strip() or draft
+        notes = "\n".join(f"- {c}" for c in result.changes) or "Editor provided no specific notes."
+        return content, notes

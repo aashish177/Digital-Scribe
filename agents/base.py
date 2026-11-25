@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 from langchain_openai import ChatOpenAI
+from langchain_core.callbacks import UsageMetadataCallbackHandler
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableSerializable
 from config import Config
@@ -13,10 +14,13 @@ class BaseAgent:
         self.llm = ChatOpenAI(
             model=Config.MODEL_NAME,
             temperature=temperature,
-            api_key=Config.OPENAI_API_KEY
+            api_key=Config.OPENAI_API_KEY,
+            max_retries=Config.MAX_RETRIES,
+            timeout=Config.REQUEST_TIMEOUT,
         )
         self.prompt: Optional[ChatPromptTemplate] = None
         self.chain: Optional[RunnableSerializable] = None
+        self.usage = {"input_tokens": 0, "output_tokens": 0}
         
         # Initialize logger
         self.logger = logging.getLogger(f"agents.{self.name}")
@@ -41,7 +45,11 @@ class BaseAgent:
         try:
             self.logger.info(f"{self.name} processing started")
             chain = self.get_chain()
-            result = chain.invoke(input_data)
+            usage_cb = UsageMetadataCallbackHandler()
+            result = chain.invoke(input_data, config={"callbacks": [usage_cb]})
+            for usage in usage_cb.usage_metadata.values():
+                self.usage["input_tokens"] += usage.get("input_tokens", 0)
+                self.usage["output_tokens"] += usage.get("output_tokens", 0)
             
             duration = time.time() - start_time
             self.logger.info(

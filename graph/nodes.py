@@ -11,8 +11,19 @@ from agents.translator import TranslatorAgent
 from agents.social_media import SocialMediaAgent
 from agents.image_gen import ImageGenAgent
 from errors import AgentError, PlannerError, ResearcherError, WriterError, EditorError, SEOError
+from config import Config
 
 logger = logging.getLogger(__name__)
+
+
+def _usage(execution_times: dict, agent) -> dict:
+    name = next(iter(execution_times))
+    usage = getattr(agent, "usage", None)
+    if not isinstance(usage, dict):
+        return {}
+    usage = dict(usage)
+    total = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+    return {"token_usage": {name: total}, "usage": {name: usage}}
 
 def planning_node(state: ContentState) -> ContentState:
     """Planning agent node with error handling and logging."""
@@ -38,7 +49,7 @@ def planning_node(state: ContentState) -> ContentState:
         duration = time.time() - start_time
         
         # Update execution times
-        execution_times = state.get("execution_times", {})
+        execution_times = {}
         execution_times["planner"] = duration
         
         logger.info(
@@ -50,6 +61,7 @@ def planning_node(state: ContentState) -> ContentState:
             "brief": brief,
             "research_queries": brief.get("research_queries", []),
             "execution_times": execution_times,
+            **_usage(execution_times, agent),
             "agent_logs": [{
                 "agent": "planner",
                 "timestamp": datetime.now().isoformat(),
@@ -85,9 +97,16 @@ def research_node(state: ContentState) -> ContentState:
             queries = [state["content_request"]]
             
         findings, docs = agent.research(queries)
+        sources = {}
+        for doc in docs:
+            meta = doc.get("metadata") or {}
+            n = meta.get("citation")
+            if n is not None and n not in sources:
+                url = meta.get("source") or doc.get("source")
+                sources[n] = {"n": n, "title": meta.get("title") or url or f"Source {n}", "url": url}
         
         duration = time.time() - start_time
-        execution_times = state.get("execution_times", {})
+        execution_times = {}
         execution_times["researcher"] = duration
         
         logger.info(
@@ -98,7 +117,9 @@ def research_node(state: ContentState) -> ContentState:
         return {
             "research_findings": findings,
             "retrieved_documents": docs,
+            "sources": [sources[n] for n in sorted(sources)],
             "execution_times": execution_times,
+            **_usage(execution_times, agent),
             "agent_logs": [{
                 "agent": "research",
                 "timestamp": datetime.now().isoformat(),
@@ -123,16 +144,18 @@ def writing_node(state: ContentState) -> ContentState:
     request_id = state.get("request_id", "unknown")
     
     logger.info(f"[{request_id[:8]}] Writing node started")
+    attempts = (state.get("writer_attempts") or 0) + 1
     
     try:
         agent = WriterAgent()
         draft = agent.write(
             brief=state.get("brief", {}),
-            research=state.get("research_findings", "")
+            research=state.get("research_findings", ""),
+            sources=state.get("sources") or [],
         )
         
         duration = time.time() - start_time
-        execution_times = state.get("execution_times", {})
+        execution_times = {}
         execution_times["writer"] = duration
         word_count = len(draft.split())
         
@@ -143,7 +166,9 @@ def writing_node(state: ContentState) -> ContentState:
         
         return {
             "draft_content": draft,
+            "writer_attempts": attempts,
             "execution_times": execution_times,
+            **_usage(execution_times, agent),
             "agent_logs": [{
                 "agent": "writer",
                 "timestamp": datetime.now().isoformat(),
@@ -158,8 +183,11 @@ def writing_node(state: ContentState) -> ContentState:
             f"[{request_id[:8]}] Writing failed after {duration:.2f}s: {str(e)}",
             exc_info=True
         )
+        if attempts < Config.MAX_WRITER_ATTEMPTS:
+            return {"draft_content": None, "writer_attempts": attempts}
         return {
-            "errors": [f"Writer error: {str(e)}"]
+            "errors": [f"Writer error: {str(e)}"],
+            "writer_attempts": attempts,
         }
 
 def editing_node(state: ContentState) -> ContentState:
@@ -177,7 +205,7 @@ def editing_node(state: ContentState) -> ContentState:
         )
         
         duration = time.time() - start_time
-        execution_times = state.get("execution_times", {})
+        execution_times = {}
         execution_times["editor"] = duration
         
         logger.info(
@@ -189,6 +217,7 @@ def editing_node(state: ContentState) -> ContentState:
             "edited_content": edited,
             "edit_notes": notes,
             "execution_times": execution_times,
+            **_usage(execution_times, agent),
             "agent_logs": [{
                 "agent": "editor",
                 "timestamp": datetime.now().isoformat(),
@@ -222,7 +251,7 @@ def seo_node(state: ContentState) -> ContentState:
         )
         
         duration = time.time() - start_time
-        execution_times = state.get("execution_times", {})
+        execution_times = {}
         execution_times["seo"] = duration
         
         logger.info(
@@ -234,6 +263,7 @@ def seo_node(state: ContentState) -> ContentState:
             "final_content": final,
             "seo_metadata": metadata,
             "execution_times": execution_times,
+            **_usage(execution_times, agent),
             "confidence_scores": {"seo": metadata.get("confidence", 0)},
             "agent_logs": [{
                 "agent": "seo",
@@ -272,12 +302,13 @@ def translator_node(state: ContentState) -> ContentState:
             translated[lang] = agent.translate(content, lang)
             
         duration = time.time() - start_time
-        execution_times = state.get("execution_times", {})
+        execution_times = {}
         execution_times["translator"] = duration
         
         return {
             "translated_content": translated,
             "execution_times": execution_times,
+            **_usage(execution_times, agent),
             "agent_logs": [{
                 "agent": "translator",
                 "timestamp": datetime.now().isoformat(),
@@ -307,12 +338,13 @@ def social_media_node(state: ContentState) -> ContentState:
         posts = agent.generate_posts(content, brief)
         
         duration = time.time() - start_time
-        execution_times = state.get("execution_times", {})
+        execution_times = {}
         execution_times["social_media"] = duration
         
         return {
             "social_media_posts": posts,
             "execution_times": execution_times,
+            **_usage(execution_times, agent),
             "agent_logs": [{
                 "agent": "social_media",
                 "timestamp": datetime.now().isoformat(),
@@ -348,7 +380,7 @@ def image_gen_node(state: ContentState) -> ContentState:
         image_url = agent.generate_image(concept["prompt"])
         
         duration = time.time() - start_time
-        execution_times = state.get("execution_times", {})
+        execution_times = {}
         execution_times["image_gen"] = duration
         
         image_data = {
@@ -360,6 +392,7 @@ def image_gen_node(state: ContentState) -> ContentState:
         return {
             "generated_images": [image_data],
             "execution_times": execution_times,
+            **_usage(execution_times, agent),
             "agent_logs": [{
                 "agent": "image_gen",
                 "timestamp": datetime.now().isoformat(),

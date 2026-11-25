@@ -1,6 +1,11 @@
 from typing import TypedDict, List, Dict, Optional, Annotated
 from operator import add
 
+
+def merge(left: Optional[Dict], right: Optional[Dict]) -> Dict:
+    return {**(left or {}), **(right or {})}
+
+
 class ContentState(TypedDict):
     """
     Shared state for the content generation pipeline.
@@ -16,9 +21,11 @@ class ContentState(TypedDict):
     research_queries: Optional[List[str]]
     research_findings: Optional[str]
     retrieved_documents: Annotated[List[Dict], add]  # Accumulate docs
+    sources: Optional[List[Dict]]  # [{n, title, url}] matching the [n] citations
     
     # Writing Stage
     draft_content: Optional[str]
+    writer_attempts: Optional[int]
     
     # Editing Stage
     edited_content: Optional[str]
@@ -42,5 +49,6 @@ class ContentState(TypedDict):
     # Execution tracking (Phase 2A)
     request_id: Optional[str]  # Unique ID for this pipeline run
     started_at: Optional[str]  # ISO timestamp when pipeline started
-    execution_times: Optional[Dict[str, float]]  # Agent name -> execution time in seconds
-    token_usage: Optional[Dict[str, int]]  # Agent name -> token count
+    execution_times: Annotated[Dict[str, float], merge]  # Agent name -> execution time in seconds
+    token_usage: Annotated[Dict[str, int], merge]  # Agent name -> total token count
+    usage: Annotated[Dict[str, Dict[str, int]], merge]  # Agent name -> input/output tokens
