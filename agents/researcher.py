@@ -1,5 +1,6 @@
 from typing import List, Tuple, Dict
 from concurrent.futures import ThreadPoolExecutor
+from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from agents.base import BaseAgent
@@ -72,10 +73,6 @@ class ResearchAgent(BaseAgent):
             1. Synthesized summary string
             2. List of unique retrieved documents (dictionaries)
         """
-        all_docs = []
-        context_parts = []
-        citations: Dict[str, int] = {}
-        
         # 1. Retrieve documents for each query in parallel
         def run_query(q):
             try:
@@ -88,6 +85,35 @@ class ResearchAgent(BaseAgent):
         with ThreadPoolExecutor(max_workers=min(len(queries), 5)) as executor:
             query_results = list(executor.map(run_query, queries))
 
+        return self._synthesize(queries, query_results)
+
+    def research_web(self, queries: List[str], web) -> Tuple[str, List[Dict]]:
+        """Searches the web for each query, reranks the page snippets and synthesizes findings.
+        A failed search (WebSearchError) stops the whole run rather than writing from partial results."""
+        def run_query(q):
+            docs = [
+                Document(page_content=chunk, metadata={"source": r.url, "title": r.title, "site": r.site,
+                                                       "published": r.published})
+                for r in web.search(q) for chunk in r.chunks()
+            ]
+            if not docs:
+                return q, []
+            ranked = self.db.get_reranker().compress_documents(docs, q)[:Config.RETRIEVAL_K]
+            return q, [{
+                "content": d.page_content,
+                "metadata": {**d.metadata, "relevance_score": float(d.metadata.get("relevance_score", 0.0))},
+                "source": d.metadata["source"],
+            } for d in ranked]
+
+        with ThreadPoolExecutor(max_workers=min(len(queries), 5)) as executor:
+            query_results = list(executor.map(run_query, queries))
+
+        return self._synthesize(queries, query_results)
+
+    def _synthesize(self, queries: List[str], query_results) -> Tuple[str, List[Dict]]:
+        all_docs = []
+        context_parts = []
+        citations: Dict[str, int] = {}
         seen_content = set()
         for q, results in query_results:
             for r in results:

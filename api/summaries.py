@@ -32,6 +32,7 @@ def _chunks(docs: List[Dict], limit: int = 6) -> List[Dict]:
             "title": meta.get("title") or doc.get("source") or "Unknown",
             "url": meta.get("source") or doc.get("source"),
             "page": meta.get("page"),
+            "site": meta.get("site"),
             "citation": meta.get("citation"),
             "score": round(float(score), 3) if score is not None else None,
             "text": (doc.get("content") or "")[:240],

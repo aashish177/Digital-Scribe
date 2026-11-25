@@ -12,8 +12,12 @@ from agents.social_media import SocialMediaAgent
 from agents.image_gen import ImageGenAgent
 from errors import AgentError, PlannerError, ResearcherError, WriterError, EditorError, SEOError
 from config import Config
+from retrieval.web import WebSearchError, get_web_search
 
 logger = logging.getLogger(__name__)
+
+# The frontend matches this prefix to offer a web search instead.
+NO_PASSAGES = "No relevant passages"
 
 
 class NoRelevantSources(Exception):
@@ -47,10 +51,13 @@ def planning_node(state: ContentState) -> ContentState:
     try:
         agent = PlannerAgent()
         request = state.get("content_request", "")
-        brief = agent.plan(request, (state.get("settings") or {}).get("source_overview"))
+        settings = state.get("settings") or {}
+        if settings.get("source") == "web":
+            brief = agent.plan(request, web=True)
+        else:
+            brief = agent.plan(request, settings.get("source_overview"))
 
         # Override brief with any user-supplied settings (word_count, tone)
-        settings = state.get("settings") or {}
         if settings.get("word_count"):
             brief["word_count_target"] = settings["word_count"]
             logger.info(f"[{request_id[:8]}] Overriding word_count_target to {settings['word_count']}")
@@ -111,10 +118,18 @@ def research_node(state: ContentState) -> ContentState:
             
         settings = state.get("settings") or {}
         collection = settings.get("collection") or "research"
-        findings, docs = agent.research(queries, collection=collection)
+        if settings.get("source") == "web":
+            web = get_web_search()
+            if web is None:
+                raise WebSearchError("Web search isn't set up on this server.")
+            findings, docs = agent.research_web(queries[:Config.WEB_MAX_QUERIES], web)
+            if not docs:
+                raise NoRelevantSources("The web search found nothing usable for this topic. Try rewording it.")
+        else:
+            findings, docs = agent.research(queries, collection=collection)
         if not docs:
             where = "your documents" if collection != "research" else "the built-in knowledge base"
-            raise NoRelevantSources(f"No relevant passages in {where} for this topic. "
+            raise NoRelevantSources(f"{NO_PASSAGES} in {where} for this topic. "
                                     "Try a topic the documents cover, or switch sources.")
         sources = {}
         for doc in docs:
@@ -126,6 +141,8 @@ def research_node(state: ContentState) -> ContentState:
                               "url": url, "page": meta.get("page")}
                 if meta.get("doc_id"):
                     sources[n]["quote"] = " ".join((doc.get("content") or "").split())[:200]
+                if meta.get("site"):
+                    sources[n].update({"site": meta["site"], "published": meta.get("published")})
         
         duration = time.time() - start_time
         execution_times = {}
@@ -150,7 +167,7 @@ def research_node(state: ContentState) -> ContentState:
             }]
         }
         
-    except NoRelevantSources as e:
+    except (NoRelevantSources, WebSearchError) as e:
         logger.info(f"[{request_id[:8]}] Research found nothing relevant")
         return {"errors": [str(e)], "execution_times": {"researcher": time.time() - start_time}}
     except Exception as e:

@@ -103,7 +103,7 @@ class GenerationRequest(BaseModel):
     languages: Optional[List[str]] = Field(default_factory=list, max_length=3)
     generate_image: Optional[bool] = True
     generate_social_posts: Optional[bool] = True
-    source: Literal["builtin", "documents"] = "builtin"
+    source: Literal["builtin", "documents", "web"] = "builtin"
     workspace_id: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
 async def send_webhook(url: str, payload: dict):
@@ -189,6 +189,8 @@ async def generate_content(req: GenerationRequest, background_tasks: BackgroundT
             raise HTTPException(status_code=400, detail="Upload at least one document first")
         collection = workspace_collection(req.workspace_id)
         overview = [{"name": d["name"], "preview": d.get("preview", "")} for d in docs.values()]
+    if req.source == "web" and not Config.TAVILY_API_KEY:
+        raise HTTPException(status_code=400, detail="Web search isn't set up on this server")
     request_id = str(uuid.uuid4())
     settings = {
         "word_count": req.word_count,
@@ -196,6 +198,7 @@ async def generate_content(req: GenerationRequest, background_tasks: BackgroundT
         "languages": [lang.strip()[:30] for lang in req.languages or [] if lang.strip()],
         "generate_image": req.generate_image,
         "generate_social_posts": req.generate_social_posts,
+        "source": req.source,
         "collection": collection,
         "source_overview": overview,
     }
@@ -289,6 +292,18 @@ async def get_status(request_id: str):
         resp["brief"] = job["result"].get("brief")
     return resp
 
+@app.get("/api/v1/config")
+async def get_config():
+    """Which optional features this server has turned on."""
+    return {"web_search": bool(Config.TAVILY_API_KEY)}
+
+
+def source_kind(settings: dict) -> str:
+    if settings.get("source"):
+        return settings["source"]
+    return "documents" if settings.get("collection", "research") != "research" else "builtin"
+
+
 @app.get("/api/v1/content/{request_id}")
 async def get_content(request_id: str):
     if request_id not in jobs:
@@ -317,7 +332,7 @@ async def get_content(request_id: str):
         "social_media_posts_by_language": result.get("social_media_posts_by_language"),
         "generated_images": result.get("generated_images"),
         "sources": source_list,
-        "source_kind": "documents" if (job.get("settings") or {}).get("collection", "research") != "research" else "builtin",
+        "source_kind": source_kind(job.get("settings") or {}),
         "execution_times": result.get("execution_times") or {},
         "edit_notes": result.get("edit_notes"),
         "agents": summarize_run(result),

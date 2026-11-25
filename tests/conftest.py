@@ -14,13 +14,19 @@ class FakeAgent:
     def __init__(self, *args, **kwargs):
         self.usage = dict(USAGE)
 
-    def plan(self, request, documents=None):
+    def plan(self, request, documents=None, web=False):
         return {"title": "T", "outline": ["a", "b"], "word_count_target": 50, "research_queries": ["q1", "q2"]}
 
     def research(self, queries, collection="research"):
         doc = {"content": "chunk", "metadata": {"title": "Heat pump", "source": "https://en.wikipedia.org/wiki/Heat_pump",
                                                 "relevance_score": 0.9, "citation": 1}}
         return "findings [1]", [doc]
+
+    def research_web(self, queries, web):
+        doc = {"content": "web chunk", "metadata": {"title": "Heat pumps in 2026", "source": "https://example.com/heat",
+                                                    "site": "example.com", "published": "Tue, 11 Mar 2026 17:00:00 GMT",
+                                                    "relevance_score": 0.8, "citation": 1}}
+        return "web findings [1]", [doc]
 
     def write(self, brief, research, sources=None):
         return "word " * 60
