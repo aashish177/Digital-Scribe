@@ -97,6 +97,7 @@ def test_file_names_are_made_safe(raw, expected):
 def db(tmp_path, mocker):
     manager = ChromaDBManager(persistent_path=str(tmp_path))
     manager.embedding_function = DeterministicFakeEmbedding(size=32)
+    manager.uncached_embedding_function = manager.embedding_function
 
     def passthrough(docs, query):
         for d in docs:

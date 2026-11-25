@@ -83,6 +83,7 @@ class Config:
 
     # API limits
     MAX_JOBS_IN_MEMORY = 200
+    JOB_TTL_SECONDS = 24 * 3600  # finished runs (and their retrieved chunks) are forgotten after this
     ALLOWED_ORIGINS = [o for o in os.getenv("ALLOWED_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000").split(",") if o]
     # Webhooks are off unless a host allowlist is configured.
     WEBHOOK_ALLOWED_HOSTS = {h.strip().lower() for h in os.getenv("WEBHOOK_ALLOWED_HOSTS", "").split(",") if h.strip()}

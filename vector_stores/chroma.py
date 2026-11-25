@@ -31,13 +31,16 @@ def _resources(path: str) -> Dict[str, Any]:
             os.makedirs(path, exist_ok=True)
             cache_dir = os.path.join(path, "embeddings_cache")
             os.makedirs(cache_dir, exist_ok=True)
+            raw_embeddings = OpenAIEmbeddings(model=Config.EMBEDDING_MODEL, api_key=Config.OPENAI_API_KEY)
             embeddings = CacheBackedEmbeddings.from_bytes_store(
-                OpenAIEmbeddings(model=Config.EMBEDDING_MODEL, api_key=Config.OPENAI_API_KEY),
+                raw_embeddings,
                 LocalFileStore(cache_dir),
                 namespace=Config.EMBEDDING_MODEL,
             )
             _shared[path] = {
                 "embeddings": embeddings,
+                # Uploads skip the disk cache so deleting a workspace leaves nothing behind.
+                "uncached_embeddings": raw_embeddings,
                 "client": chromadb.PersistentClient(path=str(path)),
                 "stores": {},
                 "bm25": {},
@@ -69,6 +72,7 @@ class ChromaDBManager:
         self.persist_path = persistent_path or Config.VECTOR_DB_PATH
         shared = _resources(self.persist_path)
         self.embedding_function = shared["embeddings"]
+        self.uncached_embedding_function = shared["uncached_embeddings"]
         self.client = shared["client"]
         self.vector_stores = shared["stores"]
         self._bm25_retrievers = shared["bm25"]
@@ -80,8 +84,10 @@ class ChromaDBManager:
         """
         if collection_name in self.COLLECTIONS:
             real_collection_name = self.COLLECTIONS[collection_name]
+            embedding_function = self.embedding_function
         elif WORKSPACE_PATTERN.match(collection_name):
             real_collection_name = collection_name
+            embedding_function = self.uncached_embedding_function
         else:
             raise ValueError(f"Unknown collection type: {collection_name}. Valid types: {list(self.COLLECTIONS.keys())}")
         
@@ -91,7 +97,7 @@ class ChromaDBManager:
                     self.vector_stores[collection_name] = Chroma(
                         client=self.client,
                         collection_name=real_collection_name,
-                        embedding_function=self.embedding_function,
+                        embedding_function=embedding_function,
                     )
             
         return self.vector_stores[collection_name]

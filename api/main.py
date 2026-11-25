@@ -13,6 +13,7 @@ from config import Config
 import json
 import logging
 import re
+import time
 import uuid
 import sys
 import os
@@ -52,13 +53,34 @@ workflow_app_hitl = create_content_workflow(enable_hitl=True)
 jobs: Dict[str, Dict[str, Any]] = {}
 
 
+def forget_job(request_id: str) -> None:
+    """Drop a job and its checkpointed run state (chunks, findings, drafts)."""
+    jobs.pop(request_id, None)
+    for workflow in (workflow_app, workflow_app_hitl):
+        try:
+            workflow.checkpointer.delete_thread(request_id)
+        except Exception as e:
+            logger.warning(f"Could not delete run state for {request_id[:8]}: {e}")
+
+
+def sweep_jobs(now: Optional[float] = None) -> None:
+    """Forget finished or abandoned runs once they are older than JOB_TTL_SECONDS."""
+    now = now or time.time()
+    expired = [rid for rid, j in jobs.items()
+               if j["status"] in ("completed", "failed", "awaiting_approval")
+               and now - j.get("created_at", now) > Config.JOB_TTL_SECONDS]
+    for rid in expired:
+        forget_job(rid)
+
+
 def add_job(request_id: str, job: Dict[str, Any]) -> None:
-    """Store a job, dropping the oldest finished ones past the cap."""
-    jobs[request_id] = job
+    """Store a job, dropping expired ones and the oldest finished ones past the cap."""
+    sweep_jobs()
+    jobs[request_id] = {"created_at": time.time(), **job}
     if len(jobs) > Config.MAX_JOBS_IN_MEMORY:
         finished = [rid for rid, j in jobs.items() if j["status"] in ("completed", "failed")]
         for rid in finished[: len(jobs) - Config.MAX_JOBS_IN_MEMORY]:
-            jobs.pop(rid, None)
+            forget_job(rid)
 
 
 def webhook_allowed(url: Optional[HttpUrl]) -> bool:
@@ -281,6 +303,7 @@ async def approve_content(request_id: str, background_tasks: BackgroundTasks):
 
 @app.get("/api/v1/status/{request_id}")
 async def get_status(request_id: str):
+    sweep_jobs()
     if request_id not in jobs:
         raise HTTPException(status_code=404, detail="Request ID not found")
     job = jobs[request_id]
@@ -291,6 +314,7 @@ async def get_status(request_id: str):
 
 @app.get("/api/v1/content/{request_id}")
 async def get_content(request_id: str):
+    sweep_jobs()
     if request_id not in jobs:
         raise HTTPException(status_code=404, detail="Request ID not found")
     job = jobs[request_id]
