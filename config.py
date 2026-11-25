@@ -87,6 +87,15 @@ class Config:
     # Webhooks are off unless a host allowlist is configured.
     WEBHOOK_ALLOWED_HOSTS = {h.strip().lower() for h in os.getenv("WEBHOOK_ALLOWED_HOSTS", "").split(",") if h.strip()}
 
+    # Web search (Tavily). The Web source is off unless a key is set.
+    TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+    WEB_RESULTS_PER_QUERY = int(os.getenv("WEB_RESULTS_PER_QUERY", "5"))
+    WEB_DAILY_SEARCH_CAP = int(os.getenv("WEB_DAILY_SEARCH_CAP", "100"))  # whole server, resets at local midnight
+    WEB_MAX_QUERIES = 5  # per run
+    WEB_TIMEOUT = 10.0
+    WEB_CACHE_SECONDS = 24 * 3600
+    WEB_BLOCKED_DOMAINS = [d.strip().lower() for d in os.getenv("WEB_BLOCKED_DOMAINS", "").split(",") if d.strip()]
+
     @classmethod
     def tier_for(cls, agent_name: str) -> str:
         return cls.AGENT_TIERS.get(agent_name, "strong")
