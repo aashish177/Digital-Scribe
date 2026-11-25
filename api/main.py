@@ -314,6 +314,7 @@ async def get_content(request_id: str):
         "brief": result.get("brief"),
         "translated_content": result.get("translated_content"),
         "social_media_posts": result.get("social_media_posts"),
+        "social_media_posts_by_language": result.get("social_media_posts_by_language"),
         "generated_images": result.get("generated_images"),
         "sources": source_list,
         "source_kind": "documents" if (job.get("settings") or {}).get("collection", "research") != "research" else "builtin",

@@ -363,10 +363,13 @@ def social_media_node(state: ContentState) -> ContentState:
         return {}
         
     logger.info(f"[{request_id[:8]}] Social Media node started")
+    # Posts follow the requested translation languages; English only when none were asked for.
+    languages = state.get("target_languages") or ["English"]
     
     try:
         agent = SocialMediaAgent()
-        posts = agent.generate_posts(content, brief)
+        by_language = {lang: agent.generate_posts(content, brief, lang) for lang in languages}
+        posts = by_language[languages[0]]
         
         duration = time.time() - start_time
         execution_times = {}
@@ -374,13 +377,15 @@ def social_media_node(state: ContentState) -> ContentState:
         
         return {
             "social_media_posts": posts,
+            "social_media_posts_by_language": by_language,
             "execution_times": execution_times,
             **_usage(execution_times, agent),
             "agent_logs": [{
                 "agent": "social_media",
                 "timestamp": datetime.now().isoformat(),
                 "duration": duration,
-                "platforms": list(posts.keys())
+                "platforms": list(posts.keys()),
+                "languages": languages,
             }]
         }
     except Exception as e:

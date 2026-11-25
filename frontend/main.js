@@ -355,7 +355,10 @@ function agentSubtitle(node, s, status) {
         case 'editor': return 'Polished the draft';
         case 'seo': return s.slug ? `/${s.slug}` : 'Title and description';
         case 'translator': return (s.languages || []).join(', ') || 'Translated';
-        case 'social_media': return (s.platforms || []).join(', ') || 'Posts drafted';
+        case 'social_media': {
+            const langs = (s.languages || []).filter(l => l !== 'English');
+            return [(s.platforms || []).join(', ') || 'Posts drafted', langs.length ? `in ${langs.join(', ')}` : ''].filter(Boolean).join(' · ');
+        }
         case 'image_gen': return 'Cover image concept';
         default: return '';
     }
@@ -638,7 +641,7 @@ async function fetchResults(requestId) {
         articleTitle = (data.seo_metadata && data.seo_metadata.url_slug) || (data.brief && data.brief.title) || 'article';
 
         $('article-view').innerHTML = renderMarkdown(articleMarkdown);
-        renderSocial(data.social_media_posts);
+        renderSocial(data.social_media_posts_by_language || (data.social_media_posts ? { '': data.social_media_posts } : null));
         renderTranslations(data.translated_content);
         renderSources(data.sources);
         renderSeo(data.seo_metadata);
@@ -656,22 +659,22 @@ async function fetchResults(requestId) {
     }
 }
 
-function renderSocial(posts) {
+function renderSocial(byLanguage) {
     const view = $('social-view');
     view.innerHTML = '';
-    const entries = Object.entries(posts || {});
-    document.querySelector('[data-tab="social"]').classList.toggle('hidden', !entries.length);
-    entries.forEach(([platform, text]) => {
-        const card = document.createElement('div');
-        card.className = 'social-post';
-        const name = document.createElement('div');
-        name.className = 'social-platform';
-        name.textContent = platform;
-        const body = document.createElement('div');
-        body.className = 'social-text';
-        body.textContent = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
-        card.append(name, body);
-        view.appendChild(card);
+    const groups = Object.entries(byLanguage || {}).filter(([, posts]) => posts && Object.keys(posts).length);
+    document.querySelector('[data-tab="social"]').classList.toggle('hidden', !groups.length);
+    groups.forEach(([language, posts]) => {
+        if (language && groups.length > 1) view.appendChild(el('div', 'translation-lang', language));
+        Object.entries(posts).forEach(([platform, text]) => {
+            if (!text) return;
+            const card = el('div', 'social-post');
+            card.append(
+                el('div', 'social-platform', language && groups.length === 1 ? `${platform} · ${language}` : platform),
+                el('div', 'social-text', typeof text === 'string' ? text : JSON.stringify(text, null, 2)),
+            );
+            view.appendChild(card);
+        });
     });
 }
 

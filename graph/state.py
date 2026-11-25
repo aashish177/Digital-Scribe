@@ -38,7 +38,8 @@ class ContentState(TypedDict):
     # Phase 3C: New Modalities
     target_languages: Optional[List[str]] # e.g. ["spanish", "french"]
     translated_content: Optional[Dict[str, str]] # language -> content
-    social_media_posts: Optional[Dict[str, str]] # platform -> content
+    social_media_posts: Optional[Dict[str, str]] # platform -> content, in the first target language
+    social_media_posts_by_language: Optional[Dict[str, Dict[str, str]]] # language -> platform -> content
     generated_images: Optional[List[Dict[str, str]]] # list of {prompt, url}
     
     # Error tracking and metadata

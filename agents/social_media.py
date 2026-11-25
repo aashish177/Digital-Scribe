@@ -19,10 +19,12 @@ class SocialMediaAgent(BaseAgent):
             ("system", """You are a social media growth expert. Your goal is to create highly engaging posts based on a long-form article.
             
             Instructions:
+            - Write every post in {language}, using natural phrasing for native speakers of that language, not a word-for-word translation.
             - Capture the hook from the article.
             - Summarize key value points.
             - Use appropriate emojis and formatting for each platform.
             - Include a call to action.
+            - Keep hashtags short; use ones that fit {language} speakers where that makes sense.
             
             {format_instructions}
             """),
@@ -37,13 +39,14 @@ class SocialMediaAgent(BaseAgent):
         
         self.chain = self.prompt | self.llm | self.parser
 
-    def generate_posts(self, content: str, brief: Dict) -> Dict[str, str]:
+    def generate_posts(self, content: str, brief: Dict, language: str = "English") -> Dict[str, str]:
         """
-        Generates social media posts for multiple platforms.
+        Generates social media posts for multiple platforms, written in the given language.
         """
         input_data = {
             "content": content,
             "brief": str(brief),
+            "language": language,
             "format_instructions": self.parser.get_format_instructions()
         }
         return self.invoke(input_data)

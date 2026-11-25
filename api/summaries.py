@@ -85,6 +85,7 @@ def summarize_node(node: str, output: Optional[Dict[str, Any]]) -> Dict[str, Any
         summary["languages"] = list((output.get("translated_content") or {}).keys())
     elif node == "social_media":
         summary["platforms"] = list((output.get("social_media_posts") or {}).keys())
+        summary["languages"] = list((output.get("social_media_posts_by_language") or {}).keys())
     elif node == "image_gen":
         images = output.get("generated_images") or []
         summary["prompt"] = images[0].get("prompt") if images else None

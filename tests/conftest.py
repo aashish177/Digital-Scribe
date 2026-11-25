@@ -34,8 +34,8 @@ class FakeAgent:
     def translate(self, content, lang):
         return f"[{lang}]"
 
-    def generate_posts(self, content, brief):
-        return {"linkedin": "post"}
+    def generate_posts(self, content, brief, language="English"):
+        return {"linkedin": f"post in {language}"}
 
     def generate_image_concept(self, title, summary):
         return {"prompt": "p", "style": "s"}
